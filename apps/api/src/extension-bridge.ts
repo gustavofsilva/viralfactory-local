@@ -45,12 +45,14 @@ export async function authenticExtension(authorization?: string) {
   const supplied = authorization?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
   return !!supplied && timingSafeEqual(Buffer.from(supplied, 'hex'), Buffer.from(await extensionKey(), 'hex'));
 }
-export function extensionDirectory() { return path.resolve(process.env.TOOLS_DIR || path.join(dataDir, '../tools'), 'chrome-extension'); }
-export async function prepareExtension() {
-  const directory = extensionDirectory();
+export function extensionDirectory(account?: string) {
+  return path.resolve(process.env.TOOLS_DIR || path.join(dataDir, '../tools'), account ? `chrome-extension-${account}` : 'chrome-extension');
+}
+export async function prepareExtension(account?: string) {
+  const directory = extensionDirectory(account);
   await mkdir(directory, { recursive: true });
   for (const filename of ['manifest.json', 'background.js', 'connector.js', 'popup.html', 'popup.js', 'popup.css']) await copyFile(path.join(rootDir, 'extensions/chrome', filename), path.join(directory, filename));
-  await writeFile(path.join(directory, 'config.js'), `export const API_BASE = ${JSON.stringify(`http://127.0.0.1:${apiPort}`)};\nexport const BRIDGE_TOKEN = ${JSON.stringify(await extensionKey())};\n`, { mode: 0o600 });
+  await writeFile(path.join(directory, 'config.js'), `export const API_BASE = ${JSON.stringify(`http://127.0.0.1:${apiPort}`)};\nexport const BRIDGE_TOKEN = ${JSON.stringify(await extensionKey())};\nexport const ACCOUNT_HANDLE = ${JSON.stringify(account || '')};\n`, { mode: 0o600 });
   return { directory, instructions: 'No Chrome habitual, abra chrome://extensions, ative Modo do desenvolvedor, clique em Carregar sem compactação e selecione esta pasta. Na aba de envio do TikTok, abra ViralFactory e clique em Conectar esta aba.' };
 }
 type Command = { id: string; action: ExtensionAction; args: Record<string, unknown>; expiresAt: number };
@@ -70,6 +72,7 @@ export class ExtensionBridge {
     this.connection = { id: randomUUID(), clientId, seenAt: Date.now(), snapshot }; return this.connection.id;
   }
   snapshot() { return this.connection && Date.now()-this.connection.seenAt < 90000 ? this.connection.snapshot : undefined; }
+  ownsConnection(id: string) { return this.connection?.id === id; }
   status(account: string) {
     const snapshot = this.snapshot();
     if (!snapshot) return { state: 'EXTENSION_OFFLINE', account: null, detail: 'Carregue a extensão no Chrome habitual e conecte a aba de envio do TikTok. Mantenha essa aba aberta.' };
@@ -141,3 +144,21 @@ export class ExtensionBridge {
   disconnect() { for (const id of this.pending.keys()) this.fail(id, new Error('Extensão desconectada.')); this.connection = undefined; }
 }
 export const extensionBridge = new ExtensionBridge();
+const extraBridges = new Map<string, ExtensionBridge>();
+export function bridgeForAccount(handle: string, primaryHandle: string) {
+  if (handle.toLowerCase() === primaryHandle.toLowerCase()) return extensionBridge;
+  const key = handle.toLowerCase();
+  let bridge = extraBridges.get(key);
+  if (!bridge) { bridge = new ExtensionBridge(); extraBridges.set(key, bridge); }
+  return bridge;
+}
+export function bridgeForConnection(id: string) {
+  if (extensionBridge.ownsConnection(id)) return extensionBridge;
+  const bridge = [...extraBridges.values()].find(value => value.ownsConnection(id));
+  if (!bridge) throw Object.assign(new Error('Conexão expirada. Reconecte a extensão.'), { statusCode: 409 });
+  return bridge;
+}
+export function disconnectAllBridges() {
+  extensionBridge.disconnect();
+  for (const bridge of extraBridges.values()) bridge.disconnect();
+}

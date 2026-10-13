@@ -115,3 +115,36 @@ model Cache {
   value     String
   createdAt DateTime @default(now())
 }
+
+model TikTokAccount {
+  id        String @id @default(cuid())
+  handle    String @unique
+  label     String
+  enabled   Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  clips     Clip[]
+}
+
+model Clip {
+  id                  String @id @default(cuid())
+  accountId           String
+  account             TikTokAccount @relation(fields: [accountId], references: [id])
+  title               String
+  caption             String
+  sourceName          String
+  sourcePath          String?
+  sourceBytes         Int
+  uploadOffset        Int @default(0)
+  durationSeconds     Float?
+  transcriptJson      String?
+  segmentsJson        String?
+  outputPath          String?
+  status              String @default("UPLOADING")
+  lastError           String?
+  postUrl             String?
+  submissionStartedAt DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  @@index([accountId, createdAt])
+}

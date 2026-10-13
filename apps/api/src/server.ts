@@ -8,15 +8,23 @@ import { produceVideo } from './production.js';
 import cron from 'node-cron';
 import { tickAgent } from './agent.js';
 import { publishSlot, tiktokBrowser } from './tiktok-browser.js';
-import { extensionBridge } from './extension-bridge.js';
+import { disconnectAllBridges } from './extension-bridge.js';
+import { analyzeClip, renderClip, publishClip, reconcileClipSubmissions } from './clips.js';
 
 await seed();
+await reconcileClipSubmissions();
 const app = await buildApp();
 const worker = new Worker(async (job, signal, log) => {
   if (job.kind === 'DISCOVER') return discover(signal, log);
   if (job.kind === 'SCRIPT' && job.videoId && job.leaseOwner) return generateScript(job.videoId, job.leaseOwner, job.id, signal, log);
   if (job.kind === 'PRODUCE' && job.videoId && job.leaseOwner) return produceVideo(job.videoId, job.id, job.leaseOwner, signal, log);
   if (job.kind === 'TIKTOK_PUBLISH' && job.leaseOwner) return publishSlot(JSON.parse(job.payload).slotId, job.id, job.leaseOwner, signal, log);
+  if (job.kind === 'CLIP_ANALYZE') return analyzeClip(JSON.parse(job.payload).clipId, signal, log);
+  if (job.kind === 'CLIP_RENDER') return renderClip(JSON.parse(job.payload).clipId, signal, log);
+  if (job.kind === 'CLIP_PUBLISH' && job.leaseOwner) {
+    const payload = JSON.parse(job.payload);
+    return publishClip(payload.clipId, job.id, job.leaseOwner, payload.allowUnverifiedCaption === true, signal, log);
+  }
   throw new PermanentError(`Etapa ${job.kind} ainda não implementada.`);
 });
 let scheduling = false;
@@ -43,7 +51,7 @@ async function shutdown() {
   scheduler.stop();
   await worker.stop();
   await tiktokBrowser.close();
-  extensionBridge.disconnect();
+  disconnectAllBridges();
   await app.close();
   await db.$disconnect();
 }

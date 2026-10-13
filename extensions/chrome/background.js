@@ -1,4 +1,6 @@
-import { API_BASE, BRIDGE_TOKEN } from './config.js';
+import * as localConfig from './config.js';
+const { API_BASE, BRIDGE_TOKEN } = localConfig;
+const ACCOUNT_HANDLE = localConfig.ACCOUNT_HANDLE || '';
 
 const base = new URL(API_BASE);
 if (base.protocol !== 'http:' || base.hostname !== '127.0.0.1') throw new Error('A conexão da extensão deve ser local.');
@@ -23,10 +25,10 @@ async function tabMessage(tabId, message) {
 }
 async function inspect(tabId, account, caption) { return tabMessage(tabId, { action: 'INSPECT', account, caption }); }
 async function connect(tabId, existingClientId) {
-  const config = await api('configuration');
+  const config = await api(`configuration${ACCOUNT_HANDLE ? `?account=${encodeURIComponent(ACCOUNT_HANDLE)}` : ''}`);
   const snapshot = await inspect(tabId, config.account);
   const clientId = existingClientId || crypto.randomUUID();
-  const result = await api('connect', { clientId, snapshot });
+  const result = await api('connect', { clientId, account: ACCOUNT_HANDLE || undefined, snapshot });
   await chrome.storage.session.set({ tabId, clientId, connectionId: result.connectionId, account: result.account, detail: 'Aba conectada. Confira a identificação da conta no painel.', receipts: [] });
   await chrome.alarms.create('viralfactory-heartbeat', { periodInMinutes: 0.5 });
   return result;
@@ -113,7 +115,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       await connect(tab.id, previous.tabId === tab.id ? previous.clientId : undefined); void tick(); return { ok: true };
     }
     if (message.action === 'DISCONNECT') {
-      try { await api('disconnect', {}); }
+      try { await api('disconnect', { connectionId: (await chrome.storage.session.get('connectionId')).connectionId }); }
       finally { await chrome.storage.session.remove(['connectionId', 'tabId', 'receipts']); await chrome.alarms.clear('viralfactory-heartbeat'); }
       return { ok: true };
     }

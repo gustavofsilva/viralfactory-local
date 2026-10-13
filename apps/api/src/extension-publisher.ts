@@ -26,7 +26,7 @@ export async function publishByExtension(options: {
   const initial = await command('REVEAL_ACCOUNT');
   if (!extensionIdentity(initial, options.account)) throw new ExtensionNeedsAttention('A extensão não confirmou a conta na tela de envio. Abra o menu de perfil para exibir seu @.');
   const oldLinks = new Set(observedPostLinks([...initial.postLinks, ...(options.knownPostLinks || [])], options.account));
-  const filename = `brasil-gerais-${options.caption.split(/\r?\n/, 1)[0].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 70)}.mp4`;
+  const filename = `${options.account}-${options.caption.split(/\r?\n/, 1)[0].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60)}.mp4`;
   await command('UPLOAD', { filename }, { file: options.file });
   await command('CAPTION', { caption: options.caption });
   const ready = await command('READY', { caption: options.caption });

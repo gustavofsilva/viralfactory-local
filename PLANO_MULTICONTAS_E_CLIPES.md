@@ -1,5 +1,11 @@
 # Multicontas e clipes de vídeos longos
 
+## Estado da primeira implementação
+
+O painel já cadastra contas e prepara uma extensão independente para cada perfil Chrome. Importa MP4/MOV locais em partes retomáveis, transcreve com Whisper, sugere cortes com Ollama, permite editar os trechos, renderiza MP4 vertical de 60 a 90 segundos e publica sob demanda pela conta selecionada. Os envios incertos não são repetidos automaticamente. Um teste isolado no disco D validou renderização de 65 segundos, cadastro de segunda conta e importação pela API.
+
+A agenda automática e a pesquisa de notícias continuam associadas à conta principal. Horários próprios por conta, agendamento de clipes, detecção de cenas, hash de origem, identidade visual configurável e publicação real numa segunda conta ainda são etapas futuras. A seleção atual usa transcrição e respeita a ordem original; ela precisa de uma gravação real autorizada para avaliar a qualidade editorial dos cortes.
+
 Decisões de produto em 13/10/2026: os vídeos de origem serão **arquivos locais** (MP4/MOV) e cada conta TikTok usará **um perfil separado do Chrome**, autenticado pelo proprietário. A meta inicial é produzir clipes verticais de aproximadamente **60 a 90 segundos**, com sugestões automáticas de trechos e revisão antes do primeiro envio de cada clipe. A campanha atual de `@brasilgerais` continua na configuração antiga até a migração ser testada.
 
 ## Fluxo no painel

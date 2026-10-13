@@ -7,10 +7,12 @@ import './styles.css';
 import { VideoTools, PublicationTools } from './VideoTools';
 import { AgentPanel } from './AgentPanel';
 import { CompilationPanel } from './CompilationPanel';
+import { ClipPanel } from './ClipPanel';
 
-type Page = 'agent' | 'overview' | 'trends' | 'studio' | 'queue' | 'library' | 'calendar' | 'publish' | 'settings';
+type Page = 'agent' | 'clips' | 'overview' | 'trends' | 'studio' | 'queue' | 'library' | 'calendar' | 'publish' | 'settings';
 const navigation = [
   { id: 'agent', label: 'Agente local', icon: Cpu },
+  { id: 'clips', label: 'Clipes e contas', icon: Film },
   { id: 'overview', label: 'Visão geral', icon: LayoutDashboard }, { id: 'trends', label: 'Tendências', icon: TrendingUp },
   { id: 'studio', label: 'Estúdio', icon: Clapperboard }, { id: 'queue', label: 'Fila de produção', icon: ListVideo },
   { id: 'library', label: 'Biblioteca', icon: FolderOpen }, { id: 'calendar', label: 'Calendário', icon: CalendarDays },
@@ -144,6 +146,7 @@ function App() {
         <section className="panel connector-panel"><div className="panel-heading"><div><h2>Próximas integrações</h2><p>Conectores adicionais previstos na especificação</p></div></div><div className="tags">{['GDELT', 'Wikimedia Pageviews', 'Reddit', 'YouTube Data API', 'Google Trends', 'TikTok', 'Pexels', 'Pixabay'].map(name => <span key={name}>{name} · em desenvolvimento</span>)}</div></section>
       </div>}
       {page === 'agent' && <AgentPanel />}
+      {page === 'clips' && <ClipPanel />}
       <footer className="workspace-footer"><span>ViralFactory Local <span className="dot">·</span> Seu conteúdo, do seu jeito.</span><span>v0.1 <span className="dot">·</span> Brasil / pt-BR</span></footer>
       </main>
     </div>

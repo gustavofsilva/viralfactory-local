@@ -1,0 +1,18 @@
+.clip-page { display: grid; gap: 18px; }
+.clip-accounts { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.clip-account { display: grid; gap: 8px; padding: 16px; border: 1px solid var(--border, #31535a); border-radius: 15px; }
+.clip-account strong small { font-weight: 400; opacity: .72; }
+.clip-actions, .clip-inline { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
+.clip-inline { margin-top: 14px; }
+.clip-inline label, .clip-editor label, .clip-segment label { display: grid; gap: 5px; min-width: 160px; }
+.clip-inline input, .clip-inline select, .clip-editor input { min-height: 38px; padding: 8px; border-radius: 9px; border: 1px solid #4d6a70; background: #102b31; color: white; }
+.clip-list { display: grid; gap: 7px; max-height: 300px; overflow: auto; }
+.clip-item { display: flex; justify-content: space-between; gap: 16px; width: 100%; text-align: left; padding: 10px 13px; border-radius: 10px; border: 1px solid #3c5e63; background: #102b31; color: white; cursor: pointer; }
+.clip-item.active { border-color: #67e0aa; }
+.clip-item span { opacity: .74; }
+.clip-editor { display: grid; gap: 13px; margin-top: 18px; }
+.clip-editor video { width: min(330px, 100%); max-height: 520px; background: black; border-radius: 12px; }
+.clip-segment { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px; border: 1px solid #3c5e63; border-radius: 10px; }
+.clip-segment p { flex: 1 1 240px; margin: 0; }
+.clip-check { display: flex !important; align-items: center; gap: 8px; max-width: 350px; }
+@media (max-width: 680px) { .clip-item { flex-direction: column; } }

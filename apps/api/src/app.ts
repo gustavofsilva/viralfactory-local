@@ -20,6 +20,8 @@ import { scriptRisk } from './content-risk.js';
 import { authenticExtension } from './extension-bridge.js';
 import { registerExtensionRoutes } from './extension-routes.js';
 import { composeReviewedScripts } from './compilation.js';
+import { registerAccountRoutes } from './account-routes.js';
+import { registerClipRoutes } from './clip-routes.js';
 
 const paramId = z.object({ id: z.string().min(1).max(100) });
 export function serializeVideo(video: { scriptJson: string | null } & Record<string, any>) {
@@ -42,7 +44,8 @@ export async function buildApp() {
     }
     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
       if (request.headers.origin && !allowedOrigins.has(request.headers.origin) && !(bridgeRoute && extensionOrigin)) return reply.code(403).send({ error: 'Origem não autorizada.' });
-      if (!request.headers['content-type']?.startsWith('application/json')) return reply.code(415).send({ error: 'Envie os dados como JSON.' });
+      const clipChunk = request.method === 'PUT' && /^\/api\/clips\/[^/]+\/chunk$/.test(request.url.split('?')[0]);
+      if (!request.headers['content-type']?.startsWith(clipChunk ? 'application/octet-stream' : 'application/json')) return reply.code(415).send({ error: clipChunk ? 'Envie parte binária do vídeo.' : 'Envie os dados como JSON.' });
     }
   });
   app.setErrorHandler((error, request, reply) => {
@@ -242,6 +245,8 @@ export async function buildApp() {
   const dist = path.join(rootDir, 'apps', 'web', 'dist');
   await registerAgentRoutes(app);
   await registerExtensionRoutes(app);
+  await registerAccountRoutes(app);
+  await registerClipRoutes(app);
   if (existsSync(path.join(dist, 'index.html'))) {
     await app.register(fastifyStatic, { root: dist });
     app.setNotFoundHandler((request, reply) => request.url.startsWith('/api/') ? reply.code(404).send({ error: 'Rota não encontrada.' }) : reply.sendFile('index.html'));

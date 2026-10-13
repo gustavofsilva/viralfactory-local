@@ -29,7 +29,7 @@ export function sceneDurations(scenes: Script['scenes'], words: TimedWord[], dur
   }
   return starts.map((start, index) => (starts[index+1] ?? duration) - start);
 }
-export async function mediaTask<T>(task: 'tts' | 'subtitles' | 'card' | 'prepare', request: object, directory: string, signal: AbortSignal) {
+export async function mediaTask<T>(task: 'tts' | 'subtitles' | 'card' | 'prepare' | 'clip_intro', request: object, directory: string, signal: AbortSignal) {
   await mkdir(directory, { recursive: true });
   const token = createHash('sha256').update(JSON.stringify(request)).digest('hex').slice(0, 12);
   const input = path.join(directory, `${task}-${token}.request.json`), output = path.join(directory, `${task}-${token}.response.json`);

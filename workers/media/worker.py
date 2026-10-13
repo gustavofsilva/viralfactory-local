@@ -193,14 +193,31 @@ def scene_card(request):
     image.save(output,'PNG')
     return {'output':str(output),'width':width,'height':height,'kind':'licensed-composition' if visual else 'original-graphic'}
 
+def clip_intro(request):
+    from PIL import Image, ImageDraw, ImageFont
+    image = Image.new('RGB', (1080, 1920), (10, 31, 45))
+    draw = ImageDraw.Draw(image)
+    draw.rounded_rectangle((90, 460, 990, 1410), radius=70, fill=(18, 70, 70), outline=(67, 224, 158), width=5)
+    font_regular = 'C:/Windows/Fonts/segoeui.ttf'
+    font_bold = 'C:/Windows/Fonts/segoeuib.ttf'
+    title = str(request.get('label') or request.get('handle') or 'CLIPES')[:35]
+    handle = '@' + str(request.get('handle') or 'canal')[:24]
+    draw.text((140, 650), title, font=ImageFont.truetype(font_bold, 68), fill=(244, 249, 244))
+    draw.text((140, 790), handle, font=ImageFont.truetype(font_regular, 44), fill=(67, 224, 158))
+    draw.text((140, 1050), 'CURTE E SIGA PARA MAIS', font=ImageFont.truetype(font_bold, 42), fill=(255, 219, 91))
+    output = Path(request['output'])
+    output.parent.mkdir(parents=True, exist_ok=True)
+    image.save(output, 'PNG')
+    return {'output': str(output)}
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('task',choices=['prepare','tts','subtitles','card'])
+    parser.add_argument('task',choices=['prepare','tts','subtitles','card','clip_intro'])
     parser.add_argument('--request',required=True)
     parser.add_argument('--response',required=True)
     args = parser.parse_args()
     request = json.loads(Path(args.request).read_text(encoding='utf-8-sig'))
-    handlers = {'prepare':prepare,'tts':synthesize,'subtitles':transcribe,'card':scene_card}
+    handlers = {'prepare':prepare,'tts':synthesize,'subtitles':transcribe,'card':scene_card,'clip_intro':clip_intro}
     result = handlers[args.task](request)
     save_json(args.response,result)
     print(json.dumps({'status':'ok','task':args.task},ensure_ascii=False),flush=True)

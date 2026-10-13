@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ExtensionBridge, extensionSnapshotSchema, extensionIdentity, validTikTokTab, extensionKey } from '../src/extension-bridge.js';
+import { ExtensionBridge, extensionSnapshotSchema, extensionIdentity, validTikTokTab, extensionKey, bridgeForAccount, bridgeForConnection, extensionBridge } from '../src/extension-bridge.js';
 import { buildApp } from '../src/app.js';
 import { readFile, mkdtemp, unlink, rmdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -10,6 +10,20 @@ import vm from 'node:vm';
 import { randomUUID } from 'node:crypto';
 
 const snapshot = extensionSnapshotSchema.parse({ connectorVersion: 5, url: 'https://www.tiktok.com/tiktokstudio/upload', title: 'Fixture de teste', accountHandles: ['conta_teste'], fileInputs: 1, postLinks: [], hasVideo: false });
+test('perfis adicionais usam pontes isoladas da conta principal e entre si', () => {
+  const first = bridgeForAccount('canal_um', 'brasilgerais');
+  const second = bridgeForAccount('canal_dois', 'brasilgerais');
+  assert.equal(bridgeForAccount('brasilgerais', 'brasilgerais'), extensionBridge);
+  assert.notEqual(first, second);
+  assert.notEqual(first, extensionBridge);
+  const one = first.connect('fixture-canal-um', { ...snapshot, accountHandles: ['canal_um'] });
+  const two = second.connect('fixture-canal-dois', { ...snapshot, accountHandles: ['canal_dois'] });
+  assert.equal(bridgeForConnection(one), first);
+  assert.equal(bridgeForConnection(two), second);
+  first.disconnect();
+  assert.equal(second.status('canal_dois').state, 'CONNECTED');
+  second.disconnect();
+});
 test('publicador por extensão preserva a tela aberta e registra intenção antes do clique', async () => {
   const bridge = new ExtensionBridge(), connection = bridge.connect('publisher-fixture-client', snapshot);
   const directory = await mkdtemp(path.join(dataDir, 'extension-publish-test-'));
@@ -192,7 +206,7 @@ test('worker da extensão reenvia só o recibo após falha de rede, sem clicar o
       scripting: { executeScript: async () => {} }
     }
   });
-  const source = (await readFile('extensions/chrome/background.js', 'utf8')).replace(/^import .*?;\s*/, "const API_BASE = 'http://127.0.0.1:4310'; const BRIDGE_TOKEN = 'fixture-key';\n");
+  const source = (await readFile('extensions/chrome/background.js', 'utf8')).replace(/^import .*?;\s*/, "const localConfig = { API_BASE: 'http://127.0.0.1:4310', BRIDGE_TOKEN: 'fixture-key', ACCOUNT_HANDLE: '' };\n");
   vm.runInContext(source, context);
   await new Promise(resolve => listener!({ action: 'CONNECT' }, { id: runtimeId, url: `chrome-extension://${runtimeId}/popup.html` }, resolve));
   await vm.runInContext('(async () => { while (busy) await new Promise(r => setTimeout(r, 1)); })()', context);

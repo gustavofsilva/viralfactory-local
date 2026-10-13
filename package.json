@@ -17,6 +17,7 @@
     "build": "npm run typecheck && npm run build --workspace @viralfactory/web",
     "typecheck": "tsc -p apps/api/tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit",
     "test": "tsx --test apps/api/test/*.test.ts",
+    "test:clips": "tsx scripts/clip-smoke.ts",
     "test:browser": "node scripts/browser-check.mjs",
     "test:extension": "node scripts/extension-check.mjs",
     "doctor": "tsx scripts/doctor.ts"

@@ -1,7 +1,7 @@
 import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 import { PrismaClient } from './generated/prisma/client.js';
 import { dbUrl } from './config.js';
-import { defaultSettings, settingsSchema } from '@viralfactory/shared';
+import { agentSettingsSchema, defaultSettings, settingsSchema } from '@viralfactory/shared';
 export function createDb(url = dbUrl) {
   return new PrismaClient({ adapter: new PrismaBetterSqlite3({ url, timeout: 5000 }) });
 }
@@ -14,6 +14,11 @@ export async function getSettings(client: Db = db) {
 export async function seed(client: Db = db) {
   await client.$queryRawUnsafe('PRAGMA journal_mode = WAL');
   await client.setting.upsert({ where: { key: 'preferences' }, create: { key: 'preferences', value: JSON.stringify(defaultSettings) }, update: {} });
+  const legacyAgent = await client.setting.findUnique({ where: { key: 'agent' } });
+  if (legacyAgent) {
+    const handle = agentSettingsSchema.parse(JSON.parse(legacyAgent.value)).accountHandle.toLowerCase();
+    if (handle) await client.tikTokAccount.upsert({ where: { handle }, create: { handle, label: `@${handle}` }, update: {} });
+  }
   const sources = [
     { name: 'Google News · Brasil', url: 'https://news.google.com/rss?hl=pt-BR&gl=BR&ceid=BR:pt-419', category: 'Todas' },
     { name: 'Google News · Em andamento', url: 'https://news.google.com/rss/search?q=%22ao+vivo%22+OR+%22hoje%22+when%3A1d&hl=pt-BR&gl=BR&ceid=BR:pt-419', category: 'Agora' },
