@@ -1,5 +1,7 @@
 # ViralFactory Local
 
+Expansão planejada: [multicontas e clipes de vídeos longos](PLANO_MULTICONTAS_E_CLIPES.md).
+
 Veja [GUIA_OPERACAO_E_INSTALACAO.md](GUIA_OPERACAO_E_INSTALACAO.md) para custos, fluxo de pesquisa até postagem, agenda e instalação em outro computador.
 
 Estúdio local em português para pesquisar assuntos e preparar vídeos curtos.
