@@ -16,4 +16,20 @@ export async function registerEpisodeBatchRoutes(app: FastifyInstance) {
     if (enabled) void tickEpisodeBatches().catch(error => app.log.error(error));
     return updated;
   });
+  app.post('/api/episode-batches/:id/retry-failed', async request => {
+    const { id } = idSchema.parse(request.params);
+    await db.episodeBatch.findUniqueOrThrow({ where: { id } });
+    const clip = await db.clip.findFirst({ where: { batchId: id, status: 'FAILED', submissionStartedAt: null }, orderBy: { sourceName: 'asc' } });
+    if (!clip) throw Object.assign(new Error('Nenhum episódio com falha segura para retomar.'), { statusCode: 409 });
+    const render = !!clip.transcriptJson && !!clip.segmentsJson;
+    const job = await db.job.findUnique({ where: { dedupeKey: `clip-${render ? 'render' : 'analyze'}:${clip.id}` } });
+    if (job && job.status !== 'FAILED') throw Object.assign(new Error('A tarefa ainda está ativa ou já foi concluída.'), { statusCode: 409 });
+    await db.$transaction(async tx => {
+      await tx.clip.update({ where: { id: clip.id }, data: { status: render ? 'APPROVED' : 'IMPORTED', lastError: null } });
+      if (job) await tx.job.update({ where: { id: job.id }, data: { status: 'RETRY_PENDING', attempts: 0, availableAt: new Date(), leaseOwner: null, leaseExpiresAt: null, lastError: null } });
+      await tx.episodeBatch.update({ where: { id }, data: { lastError: null } });
+    });
+    if (!job) void tickEpisodeBatches().catch(error => app.log.error(error));
+    return { clipId: clip.id, resumed: true };
+  });
 }

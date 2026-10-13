@@ -66,6 +66,12 @@ try {
     await tickEpisodeBatches();
     if ((await db.job.count({ where: { kind: 'CLIP_ANALYZE', status: 'QUEUED' } })) !== 1) throw new Error('Episódio duplicado na fila.');
     process.stdout.write('OK primeiro episódio agendado uma vez\n');
+    const queuedClipId = JSON.parse(queued[0].payload).clipId;
+    await db.job.update({ where: { id: queued[0].id }, data: { status: 'FAILED' } });
+    await db.clip.update({ where: { id: queuedClipId }, data: { status: 'FAILED', lastError: 'Falha simulada antes de publicar.' } });
+    const retried = await app.inject({ method: 'POST', url: `/api/episode-batches/${batch.json().batchId}/retry-failed`, payload: {} });
+    if (retried.statusCode !== 200 || (await db.clip.findUniqueOrThrow({ where: { id: queuedClipId } })).status !== 'IMPORTED' || (await db.job.findUniqueOrThrow({ where: { id: queued[0].id } })).status !== 'RETRY_PENDING') throw new Error(`Retomar episódio: ${retried.body}`);
+    process.stdout.write('OK retomada sem duplicar publicação\n');
   } finally { await app.close(); }
 } finally {
   await db.$disconnect();

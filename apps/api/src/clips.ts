@@ -96,6 +96,7 @@ export async function analyzeClip(id: string, signal: AbortSignal, log: (value: 
   const directory = clipDirectory(id);
   try {
     await db.clip.update({ where: { id }, data: { status: 'ANALYZING', lastError: null } });
+    await mkdir(directory, { recursive: true });
     const audio = path.join(directory, 'audio.wav');
     await log('Extraindo áudio e transcrevendo com Whisper local.');
     await runProcess(ffmpegPath, ['-hide_banner', '-loglevel', 'error', '-y', '-i', clip.sourcePath, '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', audio], { signal, timeout: 180000 });
