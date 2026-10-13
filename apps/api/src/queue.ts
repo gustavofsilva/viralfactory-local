@@ -27,7 +27,9 @@ export async function recoverExpired(client: Db = db, now = new Date()) {
 }
 export async function claim(client: Db = db, leaseMs = 30000) {
   const now = new Date();
-  const candidate = await client.job.findFirst({ where: { status: { in: ['QUEUED', 'RETRY_PENDING'] }, availableAt: { lte: now } }, orderBy: { createdAt: 'asc' } });
+  const ready = { status: { in: ['QUEUED', 'RETRY_PENDING'] }, availableAt: { lte: now } };
+  const candidate = await client.job.findFirst({ where: { ...ready, kind: { notIn: ['CLIP_ANALYZE', 'CLIP_RENDER', 'CLIP_PUBLISH'] } }, orderBy: { createdAt: 'asc' } }) ||
+    await client.job.findFirst({ where: ready, orderBy: { createdAt: 'asc' } });
   if (!candidate) return null;
   if (candidate.attempts >= candidate.maxAttempts) {
     await client.job.updateMany({ where: { id: candidate.id, status: candidate.status }, data: { status: 'FAILED', lastError: candidate.lastError || 'Limite de tentativas atingido.' } });

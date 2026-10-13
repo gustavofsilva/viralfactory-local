@@ -11,7 +11,7 @@ import { observedPostLinks } from './tiktok-browser.js';
 const idSchema = z.object({ id: z.string().min(1).max(100) });
 const locks = new Set<string>();
 const MAX_SOURCE_BYTES = 1024 * 1024 * 1024;
-const serialize = (clip: Record<string, any>) => ({ ...clip, transcript: clip.transcriptJson ? JSON.parse(clip.transcriptJson) : null, segments: clip.segmentsJson ? JSON.parse(clip.segmentsJson) : null, transcriptJson: undefined, segmentsJson: undefined, sourcePath: undefined });
+const serialize = (clip: Record<string, any>) => ({ ...clip, segments: clip.segmentsJson ? JSON.parse(clip.segmentsJson) : null, transcriptJson: undefined, segmentsJson: undefined, sourcePath: undefined });
 export async function registerClipRoutes(app: FastifyInstance) {
   app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer', bodyLimit: 4_300_000 }, (_request, body, done) => done(null, body));
   app.get('/api/clips', async () => (await db.clip.findMany({ include: { account: true }, orderBy: { createdAt: 'desc' }, take: 100 })).map(serialize));
@@ -97,14 +97,14 @@ export async function registerClipRoutes(app: FastifyInstance) {
   });
   app.get('/api/clips/:id/file/:kind', async (request, reply) => {
     const { id, kind } = z.object({ id: z.string().min(1).max(100), kind: z.enum(['source', 'video']) }).parse(request.params);
-    const clip = await db.clip.findUniqueOrThrow({ where: { id } });
+    const clip = await db.clip.findUniqueOrThrow({ where: { id }, include: { batch: true } });
     const filename = kind === 'source' ? clip.sourcePath : clip.outputPath;
     if (!filename) return reply.code(404).send({ error: 'Arquivo ainda não disponível.' });
-    const root = path.resolve(clipDirectory(id)) + path.sep;
-    if (!path.resolve(filename).startsWith(root)) return reply.code(403).send({ error: 'Arquivo fora da pasta do clipe.' });
+    const root = path.resolve(kind === 'source' && clip.batch ? clip.batch.sourceRoot : clipDirectory(id)) + path.sep;
+    if (!path.resolve(filename).toLowerCase().startsWith(root.toLowerCase())) return reply.code(403).send({ error: 'Arquivo fora da pasta do clipe.' });
     const info = await stat(filename);
     const range = request.headers.range?.match(/^bytes=(\d+)-(\d*)$/);
-    reply.header('accept-ranges', 'bytes').type('video/mp4');
+    reply.header('accept-ranges', 'bytes').type(kind === 'source' && path.extname(filename).toLowerCase() === '.mkv' ? 'video/x-matroska' : 'video/mp4');
     if (range) {
       const start = Number(range[1]), end = range[2] ? Math.min(Number(range[2]), info.size - 1) : info.size - 1;
       if (start >= info.size || end < start) return reply.code(416).send();

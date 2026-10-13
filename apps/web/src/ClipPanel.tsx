@@ -4,6 +4,7 @@ import './clip.css';
 type Account = { id: string; handle: string; label: string; enabled: boolean; primary: boolean; extensionDirectory: string; connection: { state: string; account: string | null; detail: string } };
 type Segment = { start: number; end: number; text: string };
 type Clip = { id: string; accountId: string; account: Account; title: string; caption: string; sourceName: string; sourceBytes: number; uploadOffset: number; durationSeconds: number | null; segments: Segment[] | null; status: string; lastError: string | null; outputPath: string | null; postUrl: string | null; createdAt: string };
+type EpisodeBatch = { id: string; account: Account; sourceRoot: string; intervalMinutes: number; enabled: boolean; nextPublishAt: string; lastError: string | null; counts: { status: string; _count: { _all: number } }[] };
 async function api<T>(url: string, method = 'GET', body?: unknown): Promise<T> {
   const response = await fetch(`/api${url}`, { method, ...(method === 'GET' ? {} : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}) }) });
   const result = await response.json();
@@ -13,6 +14,10 @@ async function api<T>(url: string, method = 'GET', body?: unknown): Promise<T> {
 export function ClipPanel() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [clips, setClips] = useState<Clip[]>([]);
+  const [batches, setBatches] = useState<EpisodeBatch[]>([]);
+  const [batchAccountId, setBatchAccountId] = useState('');
+  const [batchRights, setBatchRights] = useState(false);
+  const [batchInterval, setBatchInterval] = useState(60);
   const [selectedId, setSelectedId] = useState<string>();
   const [newHandle, setNewHandle] = useState('');
   const [newLabel, setNewLabel] = useState('');
@@ -32,9 +37,10 @@ export function ClipPanel() {
   const [error, setError] = useState('');
   const selected = clips.find(clip => clip.id === selectedId);
   async function refresh() {
-    const [nextAccounts, nextClips] = await Promise.all([api<Account[]>('/accounts'), api<Clip[]>('/clips')]);
-    setAccounts(nextAccounts); setClips(nextClips);
+    const [nextAccounts, nextClips, nextBatches] = await Promise.all([api<Account[]>('/accounts'), api<Clip[]>('/clips'), api<EpisodeBatch[]>('/episode-batches')]);
+    setAccounts(nextAccounts); setClips(nextClips); setBatches(nextBatches);
     setAccountId(current => current || nextAccounts[0]?.id || '');
+    setBatchAccountId(current => current || nextAccounts.find(account => account.handle === 'autoanimescortes')?.id || nextAccounts[0]?.id || '');
   }
   useEffect(() => { void refresh().catch(value => setError(String(value))); const timer = setInterval(() => { if (!document.hidden) void refresh().catch(() => {}); }, 6000); return () => clearInterval(timer); }, []);
   function choose(clip: Clip) {
@@ -67,6 +73,10 @@ export function ClipPanel() {
     <section className="panel"><div className="panel-heading"><div><h2>Contas TikTok</h2><p>Um perfil do Chrome por conta. A extensão confere o @ antes de enviar.</p></div></div>
       <div className="clip-accounts">{accounts.map(account => <div className="clip-account" key={account.id}><strong>{account.label} <small>@{account.handle}</small></strong><span>{account.connection.state === 'CONNECTED' ? 'Conectada' : 'Desconectada ou aguardando identificação'}</span><div className="clip-actions"><button className="button secondary" disabled={!!busy} onClick={() => void run('extension', async () => { const result = await api<{ directory: string }>(`/accounts/${account.id}/extension/setup`, 'POST'); setNotice(`No perfil Chrome de @${account.handle}, carregue a extensão sem compactação em: ${result.directory}`); })}>Preparar extensão</button><button className="button secondary" disabled={!!busy} onClick={() => void run('check', async () => { const result = await api<{ state: string }>(`/accounts/${account.id}/browser/check`, 'POST'); setNotice(`@${account.handle}: ${result.state}`); })}>Verificar conta</button></div></div>)}</div>
       <form className="clip-inline" onSubmit={event => { event.preventDefault(); void run('account', async () => { await api('/accounts', 'POST', { handle: newHandle, label: newLabel || undefined }); setNewHandle(''); setNewLabel(''); setNotice('Conta cadastrada. Prepare a extensão no perfil Chrome correspondente.'); }); }}><label>Novo @<input value={newHandle} onChange={event => setNewHandle(event.target.value)} placeholder="@minha_conta" required /></label><label>Nome no painel<input value={newLabel} onChange={event => setNewLabel(event.target.value)} placeholder="Canal de clipes" /></label><button className="button secondary" disabled={!!busy}>Adicionar conta</button></form>
+    </section>
+    <section className="panel"><div className="panel-heading"><div><h2>Temporadas em lote</h2><p>Biblioteca local D:\ViralFactoryLocal\videos. Um clipe de 60 a 90 segundos por episódio, em ordem, com intervalo entre publicações.</p></div></div>
+      <div className="clip-inline"><label>Conta de destino<select value={batchAccountId} onChange={event => setBatchAccountId(event.target.value)}>{accounts.map(account => <option key={account.id} value={account.id}>@{account.handle}</option>)}</select></label><label>Intervalo (minutos)<input type="number" min="60" max="1440" value={batchInterval} onChange={event => setBatchInterval(Number(event.target.value))} /></label><label className="clip-check"><input type="checkbox" checked={batchRights} onChange={event => setBatchRights(event.target.checked)} /> Tenho autorização para recortar e publicar todos os episódios desta biblioteca</label><button className="button secondary" disabled={!!busy || !batchRights || !batchAccountId} onClick={() => void run('batch', async () => { const result = await api<{ count: number }>('/episode-batches', 'POST', { accountId: batchAccountId, intervalMinutes: batchInterval, rightsConfirmed: true }); setBatchRights(false); setNotice(`${result.count} episódios encontrados. Ative o lote para começar.`); })}>Criar lote</button></div>
+      <div className="clip-accounts">{batches.map(batch => <div className="clip-account" key={batch.id}><strong>@{batch.account.handle} · {batch.counts.reduce((sum, row) => sum + row._count._all, 0)} episódios</strong><span>{batch.enabled ? 'Ativo' : 'Pausado'} · 1 clipe a cada {batch.intervalMinutes} min · próximo envio: {new Date(batch.nextPublishAt).toLocaleString('pt-BR')}</span><span>{batch.counts.map(row => `${row.status}: ${row._count._all}`).join(' · ')}</span>{batch.lastError && <p className="notice error">{batch.lastError}</p>}<button className="button secondary" disabled={!!busy} onClick={() => void run('batch-toggle', async () => { await api(`/episode-batches/${batch.id}`, 'PATCH', { enabled: !batch.enabled }); setNotice(batch.enabled ? 'Lote pausado.' : 'Lote ativado.'); })}>{batch.enabled ? 'Pausar lote' : 'Ativar lote'}</button></div>)}</div>
     </section>
     <section className="panel"><div className="panel-heading"><div><h2>Importar vídeo longo</h2><p>MP4/MOV com áudio, de 1 a 30 minutos e até 1 GB. O arquivo fica no disco D.</p></div></div>
       <div className="clip-inline"><label>Conta de destino<select value={accountId} onChange={event => setAccountId(event.target.value)}>{accounts.map(account => <option key={account.id} value={account.id}>@{account.handle}</option>)}</select></label><label>Vídeo<input type="file" accept=".mp4,.mov,video/mp4,video/quicktime" onChange={event => setFile(event.target.files?.[0])} /></label><label>Título<input value={draftTitle} onChange={event => setDraftTitle(event.target.value)} placeholder="Título do clipe" /></label><label>Legenda inicial<input value={draftCaption} onChange={event => setDraftCaption(event.target.value)} placeholder="Texto da publicação" /></label><label className="clip-check"><input type="checkbox" checked={sourceAuthorized} onChange={event => setSourceAuthorized(event.target.checked)} /> Tenho autorização para editar e publicar este vídeo</label><button className="button primary" disabled={!!busy || !file || !sourceAuthorized} onClick={() => void run('upload', upload)}>{selected?.status === 'UPLOADING' && selected.sourceName === file?.name ? 'Retomar upload' : 'Importar e analisar'}</button></div>{busy === 'upload' && <p>Copiando: {progress}%</p>}

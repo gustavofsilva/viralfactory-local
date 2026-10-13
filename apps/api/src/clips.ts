@@ -45,20 +45,29 @@ export function candidateSegments(words: ClipWord[], duration: number) {
   return chunks;
 }
 
-async function selectHighlights(chunks: ClipSegment[], model: string, signal: AbortSignal) {
+function narrativeScore(segment: ClipSegment) {
+  const words = segment.text.split(/\s+/).filter(Boolean);
+  return Math.min(words.length, 65) + (/[!?]/.test(segment.text) ? 12 : 0) + (/[.:]/.test(segment.text) ? 4 : 0) + new Set(words.map(word => word.toLowerCase())).size / 4;
+}
+export function narrativeCandidates(chunks: ClipSegment[], duration: number) {
+  const interior = chunks.filter(chunk => chunk.start >= 90 && chunk.end <= duration - 75);
+  const pool = interior.length >= 4 ? interior : chunks;
+  return [...pool].sort((a, b) => narrativeScore(b) - narrativeScore(a)).slice(0, 24).sort((a, b) => a.start - b.start);
+}
+async function selectHighlights(chunks: ClipSegment[], model: string, signal: AbortSignal, narrative = false) {
   const schema = z.object({ ids: z.array(z.number().int().min(0).max(chunks.length - 1)).min(1).max(8) });
   try {
     const response = await fetch(`${ollamaUrl}/api/chat`, { method: 'POST', headers: { 'content-type': 'application/json' }, signal: AbortSignal.any([signal, AbortSignal.timeout(120000)]), body: JSON.stringify({ model, stream: false, think: false, format: z.toJSONSchema(schema), options: { temperature: 0.1, num_predict: 400 }, messages: [
-      { role: 'system', content: 'Escolha apenas IDs de trechos existentes para um clipe informativo e coerente de 60 a 90 segundos. Priorize momentos importantes, concretos e compreensíveis, sem publicidade, repetições ou frases cortadas. Preserve a ordem cronológica. Retorne somente JSON.' },
-      { role: 'user', content: JSON.stringify(chunks.map((chunk, id) => ({ id, seconds: Math.round(chunk.end - chunk.start), text: chunk.text.slice(0, 750) }))) }
+      { role: 'system', content: narrative ? 'Escolha apenas IDs de trechos existentes para um clipe narrativo de 60 a 90 segundos. Busque a cena de maior tensão, virada ou emoção que tenha contexto suficiente para ser entendida. Evite abertura, encerramento, recapitulação e falas soltas. Mantenha a ordem original. Retorne somente JSON.' : 'Escolha apenas IDs de trechos existentes para um clipe informativo e coerente de 60 a 90 segundos. Priorize momentos importantes, concretos e compreensíveis, sem publicidade, repetições ou frases cortadas. Preserve a ordem cronológica. Retorne somente JSON.' },
+      { role: 'user', content: JSON.stringify(chunks.map((chunk, id) => ({ id, seconds: Math.round(chunk.end - chunk.start), text: chunk.text.slice(0, narrative ? 350 : 750) }))) }
     ] }) });
     if (!response.ok) throw new Error('Modelo indisponível');
     const result = await response.json() as { message?: { content?: string } };
     return [...new Set(schema.parse(JSON.parse(result.message?.content || '{}')).ids)].sort((a, b) => a - b);
-  } catch { signal.throwIfAborted(); return chunks.map((_, id) => id); }
+  } catch { signal.throwIfAborted(); return chunks.map((_, id) => id).sort((a, b) => narrative ? narrativeScore(chunks[b]) - narrativeScore(chunks[a]) : a - b); }
 }
 
-export function fitHighlights(chunks: ClipSegment[], preferred: number[], duration: number) {
+export function fitHighlights(chunks: ClipSegment[], preferred: number[], duration: number, narrative = false) {
   const ids = [...new Set([...preferred, ...chunks.map((_, id) => id)])];
   const selected: ClipSegment[] = [];
   let total = 0;
@@ -73,7 +82,9 @@ export function fitHighlights(chunks: ClipSegment[], preferred: number[], durati
   }
   selected.sort((a, b) => a.start - b.start);
   if (total < 60 && duration >= 60) {
-    const fallback: ClipSegment[] = [{ start: 0, end: Math.min(duration, 75), text: 'Seleção contínua: ajuste os cortes antes de gerar.' }];
+    const center = narrative && chunks.length ? [...chunks].sort((a, b) => narrativeScore(b) - narrativeScore(a))[0].start : 0;
+    const start = Math.min(Math.max(0, center - 15), duration - 65);
+    const fallback: ClipSegment[] = [{ start, end: Math.min(duration, start + 75), text: 'Seleção contínua: ajuste os cortes antes de gerar.' }];
     return validateClipSegments(fallback, duration);
   }
   return validateClipSegments(selected, duration);
@@ -81,7 +92,7 @@ export function fitHighlights(chunks: ClipSegment[], preferred: number[], durati
 
 export async function analyzeClip(id: string, signal: AbortSignal, log: (value: string) => Promise<void>) {
   const clip = await db.clip.findUniqueOrThrow({ where: { id } });
-  if (clip.status !== 'IMPORTED' || !clip.sourcePath || !clip.durationSeconds) throw new PermanentError('Arquivo não está pronto para análise.');
+  if (!['IMPORTED', 'ANALYZING'].includes(clip.status) || !clip.sourcePath || !clip.durationSeconds) throw new PermanentError('Arquivo não está pronto para análise.');
   const directory = clipDirectory(id);
   try {
     await db.clip.update({ where: { id }, data: { status: 'ANALYZING', lastError: null } });
@@ -89,13 +100,15 @@ export async function analyzeClip(id: string, signal: AbortSignal, log: (value: 
     await log('Extraindo áudio e transcrevendo com Whisper local.');
     await runProcess(ffmpegPath, ['-hide_banner', '-loglevel', 'error', '-y', '-i', clip.sourcePath, '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', audio], { signal, timeout: 180000 });
     const transcript = await mediaTask<{ words: ClipWord[]; text: string }>('subtitles', { audio, model: whisperModel, text: '', output: path.join(directory, 'source.ass'), duration: clip.durationSeconds }, directory, signal);
-    const chunks = candidateSegments(transcript.words, clip.durationSeconds);
+    const narrative = !!clip.batchId;
+    const allChunks = candidateSegments(transcript.words, clip.durationSeconds);
+    const chunks = narrative ? narrativeCandidates(allChunks, clip.durationSeconds) : allChunks;
     if (!chunks.length) throw new Error('A transcrição não encontrou fala suficiente para sugerir cortes.');
     const preferences = await db.setting.findUnique({ where: { key: 'preferences' } });
     const model = preferences ? JSON.parse(preferences.value).ollamaModel || 'qwen3:4b' : 'qwen3:4b';
     await log(`Avaliando ${chunks.length} trechos com o modelo local.`);
-    const preferred = await selectHighlights(chunks, model, signal);
-    const selected = fitHighlights(chunks, preferred, clip.durationSeconds);
+    const preferred = await selectHighlights(chunks, model, signal, narrative);
+    const selected = fitHighlights(chunks, preferred, clip.durationSeconds, narrative);
     await db.clip.update({ where: { id }, data: { transcriptJson: JSON.stringify(transcript.words), segmentsJson: JSON.stringify(selected), status: 'SUGGESTED' } });
     await log(`Sugestão de ${selected.length} trechos pronta para revisão.`);
   } catch (error) {
@@ -125,7 +138,7 @@ export function clipSubtitles(words: ClipWord[], segments: ClipSegment[]) {
 
 export async function renderClip(id: string, signal: AbortSignal, log: (value: string) => Promise<void>) {
   const clip = await db.clip.findUniqueOrThrow({ where: { id }, include: { account: true } });
-  if (clip.status !== 'APPROVED' || !clip.sourcePath || !clip.durationSeconds || !clip.segmentsJson || !clip.transcriptJson) throw new PermanentError('Revise os trechos antes de gerar o clipe.');
+  if (!['APPROVED', 'RENDERING'].includes(clip.status) || !clip.sourcePath || !clip.durationSeconds || !clip.segmentsJson || !clip.transcriptJson) throw new PermanentError('Revise os trechos antes de gerar o clipe.');
   const segments = validateClipSegments(JSON.parse(clip.segmentsJson), clip.durationSeconds);
   const directory = clipDirectory(id);
   try {

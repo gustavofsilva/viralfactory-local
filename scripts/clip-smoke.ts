@@ -48,6 +48,24 @@ try {
     const complete = await app.inject({ method: 'POST', url: `/api/clips/${importedId}/complete`, payload: {} });
     if (complete.statusCode !== 200 || (await db.clip.findUniqueOrThrow({ where: { id: importedId } })).status !== 'IMPORTED') throw new Error(`Concluir upload: ${complete.body}`);
     process.stdout.write('OK contas separadas e importação local pela API\n');
+    const batch = await app.inject({ method: 'POST', url: '/api/episode-batches', payload: { accountId: second.id, intervalMinutes: 60, rightsConfirmed: true } });
+    if (batch.statusCode !== 200 || batch.json().count < 1) throw new Error(`Importar temporadas: ${batch.body}`);
+    const overview = await app.inject({ method: 'GET', url: '/api/episode-batches' });
+    if (overview.statusCode !== 200 || overview.json()[0].counts[0]._count._all !== batch.json().count) throw new Error(`Resumo dos episódios: ${overview.body}`);
+    process.stdout.write(`OK ${batch.json().count} episódios indexados sem copiar os originais\n`);
+    await db.job.updateMany({ where: { kind: 'CLIP_ANALYZE' }, data: { status: 'COMPLETED' } });
+    await db.episodeBatch.update({ where: { id: batch.json().batchId }, data: { enabled: true } });
+    const { tickEpisodeBatches } = await import('../apps/api/src/episode-batches.js');
+    const news = await db.job.create({ data: { kind: 'DISCOVER', dedupeKey: 'smoke-news-priority', payload: '{}' } });
+    await tickEpisodeBatches();
+    if (await db.job.count({ where: { kind: 'CLIP_ANALYZE', status: 'QUEUED' } })) throw new Error('Lote ultrapassou tarefa de notícias ativa.');
+    await db.job.update({ where: { id: news.id }, data: { status: 'COMPLETED' } });
+    await tickEpisodeBatches();
+    const queued = await db.job.findMany({ where: { kind: 'CLIP_ANALYZE', status: 'QUEUED' } });
+    if (queued.length !== 1 || !(await db.clip.findFirst({ where: { batchId: batch.json().batchId, durationSeconds: { not: null } } }))) throw new Error('Agendamento do primeiro episódio falhou.');
+    await tickEpisodeBatches();
+    if ((await db.job.count({ where: { kind: 'CLIP_ANALYZE', status: 'QUEUED' } })) !== 1) throw new Error('Episódio duplicado na fila.');
+    process.stdout.write('OK primeiro episódio agendado uma vez\n');
   } finally { await app.close(); }
 } finally {
   await db.$disconnect();

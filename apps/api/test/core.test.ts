@@ -95,6 +95,11 @@ test('dois workers concorrentes não adquirem a mesma tarefa', async () => fixtu
   assert.equal(winner.attempts, 1);
   assert.ok(winner.leaseOwner);
 }));
+test('tarefas de notícias entram antes dos clipes em espera', async () => fixture(async first => {
+  await first.job.create({ data: { kind: 'CLIP_ANALYZE', payload: '{}', dedupeKey: 'clip-first' } });
+  await first.job.create({ data: { kind: 'DISCOVER', payload: '{}', dedupeKey: 'news-second' } });
+  assert.equal((await claim(first))?.kind, 'DISCOVER');
+}));
 test('lease expirado é recuperado e o antigo dono não pode concluir', async () => fixture(async (first, second) => {
   await enqueue('DISCOVER', {}, 'restart', first);
   const old = (await claim(first))!;

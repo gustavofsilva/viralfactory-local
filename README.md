@@ -1,6 +1,7 @@
 # ViralFactory Local
 
 O painel **Clipes** permite cadastrar contas TikTok separadas, importar MP4/MOV locais, sugerir cortes de 60 a 90 segundos, renderizar um clipe vertical e enviá-lo pela extensão da conta escolhida. Veja o [guia de operação](GUIA_OPERACAO_E_INSTALACAO.md) e o [escopo da expansão](PLANO_MULTICONTAS_E_CLIPES.md).
+Temporadas locais em MKV/MP4/MOV podem ser indexadas em lote a partir de `D:\ViralFactoryLocal\videos`, com um clipe por episódio e intervalo mínimo configurável entre publicações.
 
 Veja [GUIA_OPERACAO_E_INSTALACAO.md](GUIA_OPERACAO_E_INSTALACAO.md) para custos, fluxo de pesquisa até postagem, agenda e instalação em outro computador.
 

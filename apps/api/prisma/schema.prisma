@@ -124,16 +124,37 @@ model TikTokAccount {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   clips     Clip[]
+  episodeBatches EpisodeBatch[]
+}
+
+model EpisodeBatch {
+  id                String @id @default(cuid())
+  accountId         String
+  account           TikTokAccount @relation(fields: [accountId], references: [id])
+  sourceRoot        String
+  intervalMinutes   Int
+  nextPublishAt     DateTime @default(now())
+  enabled           Boolean @default(false)
+  rightsConfirmedAt DateTime
+  lastError         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  clips             Clip[]
+  @@index([enabled, nextPublishAt])
+  @@unique([accountId, sourceRoot])
 }
 
 model Clip {
   id                  String @id @default(cuid())
   accountId           String
   account             TikTokAccount @relation(fields: [accountId], references: [id])
+  batchId             String?
+  batch               EpisodeBatch? @relation(fields: [batchId], references: [id])
   title               String
   caption             String
   sourceName          String
   sourcePath          String?
+  sourceModifiedAt    DateTime?
   sourceBytes         Int
   uploadOffset        Int @default(0)
   durationSeconds     Float?
@@ -147,4 +168,5 @@ model Clip {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   @@index([accountId, createdAt])
+  @@unique([batchId, sourcePath])
 }

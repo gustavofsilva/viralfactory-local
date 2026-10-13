@@ -10,6 +10,7 @@ import { tickAgent } from './agent.js';
 import { publishSlot, tiktokBrowser } from './tiktok-browser.js';
 import { disconnectAllBridges } from './extension-bridge.js';
 import { analyzeClip, renderClip, publishClip, reconcileClipSubmissions } from './clips.js';
+import { tickEpisodeBatches } from './episode-batches.js';
 
 await seed();
 await reconcileClipSubmissions();
@@ -38,12 +39,14 @@ const scheduler = cron.schedule('* * * * *', async () => {
       await enqueueDiscovery(`discover:scheduled:${settings.discoveryIntervalMinutes}:${slot}`);
     }
     await tickAgent();
+    await tickEpisodeBatches();
   } catch (error) { app.log.error(error); }
   finally { scheduling = false; }
 }, { timezone: 'America/Sao_Paulo' });
 await app.listen({ port: apiPort, host: '127.0.0.1' });
 worker.start();
 await tickAgent();
+await tickEpisodeBatches();
 let closing = false;
 async function shutdown() {
   if (closing) return;

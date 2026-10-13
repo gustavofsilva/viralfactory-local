@@ -22,6 +22,7 @@ import { registerExtensionRoutes } from './extension-routes.js';
 import { composeReviewedScripts } from './compilation.js';
 import { registerAccountRoutes } from './account-routes.js';
 import { registerClipRoutes } from './clip-routes.js';
+import { registerEpisodeBatchRoutes } from './episode-batch-routes.js';
 
 const paramId = z.object({ id: z.string().min(1).max(100) });
 export function serializeVideo(video: { scriptJson: string | null } & Record<string, any>) {
@@ -247,6 +248,7 @@ export async function buildApp() {
   await registerExtensionRoutes(app);
   await registerAccountRoutes(app);
   await registerClipRoutes(app);
+  await registerEpisodeBatchRoutes(app);
   if (existsSync(path.join(dist, 'index.html'))) {
     await app.register(fastifyStatic, { root: dist });
     app.setNotFoundHandler((request, reply) => request.url.startsWith('/api/') ? reply.code(404).send({ error: 'Rota não encontrada.' }) : reply.sendFile('index.html'));
