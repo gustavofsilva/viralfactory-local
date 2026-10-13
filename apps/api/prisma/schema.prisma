@@ -1,0 +1,117 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+datasource db {
+  provider = "sqlite"
+}
+model Setting {
+  key       String @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+model Source {
+  id            String @id @default(cuid())
+  name          String
+  url           String @unique
+  category      String @default("Todas")
+  enabled       Boolean @default(true)
+  lastFetchedAt DateTime?
+  lastError     String?
+  itemCount     Int @default(0)
+  createdAt     DateTime @default(now())
+}
+model Trend {
+  id           String @id @default(cuid())
+  fingerprint  String @unique
+  title        String
+  summary      String
+  category     String
+  eventDate    String?
+  publishedAt  DateTime?
+  discoveredAt DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  observations Observation[]
+  videos       Video[]
+}
+model Observation {
+  id          String @id @default(cuid())
+  trendId     String
+  trend       Trend @relation(fields: [trendId], references: [id])
+  sourceName  String
+  sourceUrl   String
+  articleUrl  String
+  summary     String
+  publishedAt DateTime?
+  observedAt  DateTime @default(now())
+  bucket      String
+  @@unique([trendId, articleUrl, bucket])
+  @@index([trendId, observedAt])
+}
+model Video {
+  id             String @id @default(cuid())
+  trendId        String @unique
+  trend          Trend @relation(fields: [trendId], references: [id])
+  title          String
+  state          String @default("DISCOVERED")
+  scriptJson     String?
+  researchJson   String?
+  artifactJson   String?
+  scriptReviewedAt DateTime?
+  reviewRequired Boolean @default(true)
+  lastError      String?
+  outputPath     String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  jobs           Job[]
+  agentSlot      AgentSlot?
+}
+model AgentSlot {
+  id                  String @id @default(cuid())
+  slotKey             String @unique
+  scheduledFor        DateTime
+  status              String @default("PLANNED")
+  selectionAttempts   Int @default(0)
+  videoId             String? @unique
+  video               Video? @relation(fields: [videoId], references: [id])
+  lastError           String?
+  postUrl             String?
+  submissionStartedAt DateTime?
+  evidencePath        String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  @@index([status, scheduledFor])
+}
+model Job {
+  id             String @id @default(cuid())
+  kind           String
+  payload        String
+  dedupeKey      String @unique
+  status         String @default("QUEUED")
+  attempts       Int @default(0)
+  maxAttempts    Int @default(3)
+  availableAt    DateTime @default(now())
+  leaseExpiresAt DateTime?
+  leaseOwner     String?
+  lastError      String?
+  videoId        String?
+  video          Video? @relation(fields: [videoId], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  logs           JobLog[]
+  @@index([status, availableAt])
+}
+model JobLog {
+  id        String @id @default(cuid())
+  jobId     String
+  job       Job @relation(fields: [jobId], references: [id])
+  level     String
+  message   String
+  createdAt DateTime @default(now())
+  @@index([jobId, createdAt])
+}
+model Cache {
+  key       String @id
+  value     String
+  createdAt DateTime @default(now())
+}

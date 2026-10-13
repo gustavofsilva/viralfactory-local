@@ -1,0 +1,17 @@
+import dotenv from 'dotenv';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { mkdirSync } from 'node:fs';
+export const rootDir = fileURLToPath(new URL('../../../', import.meta.url));
+dotenv.config({ path: path.join(rootDir, '.env'), quiet: true });
+export const dataDir = path.resolve(rootDir, process.env.DATA_DIR || 'data');
+export const dbUrl = `file:${path.join(dataDir, 'viralfactory.db').replaceAll('\\', '/')}`;
+export const apiPort = Number(process.env.API_PORT || 4310);
+export const webPort = Number(process.env.WEB_PORT || 5173);
+export const ollamaUrl = process.env.OLLAMA_URL || 'http://127.0.0.1:11434';
+export const pythonPath = process.env.PYTHON_PATH || 'python';
+export const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg';
+export const ffprobePath = process.env.FFPROBE_PATH || 'ffprobe';
+export const piperModel = process.env.PIPER_MODEL || path.join(dataDir, 'models/piper/pt_BR-faber-medium.onnx');
+export const whisperModel = process.env.WHISPER_MODEL || path.join(dataDir, 'models/whisper/small');
+for (const folder of ['', 'logs', 'videos', 'audio', 'cache', 'runtime']) mkdirSync(path.join(dataDir, folder), { recursive: true });

@@ -1,0 +1,5 @@
+piper-tts>=1.4,<2
+faster-whisper>=1.2,<2
+av==15.1.0
+Pillow>=11,<13
+huggingface-hub>=0.30,<2
