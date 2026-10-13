@@ -34,7 +34,9 @@ export async function mediaTask<T>(task: 'tts' | 'subtitles' | 'card' | 'prepare
   const token = createHash('sha256').update(JSON.stringify(request)).digest('hex').slice(0, 12);
   const input = path.join(directory, `${task}-${token}.request.json`), output = path.join(directory, `${task}-${token}.response.json`);
   await writeFile(input, JSON.stringify(request), 'utf8');
-  await runProcess(pythonPath, ['-X', 'utf8', path.join(rootDir, 'workers/media/worker.py'), task, '--request', input, '--response', output], { signal, timeout: task === 'prepare' ? 1800000 : task === 'subtitles' ? 600000 : 240000, env: { ...process.env, TEMP: path.join(path.dirname(dataDir), 'tmp'), TMP: path.join(path.dirname(dataDir), 'tmp'), PYTHONUTF8: '1', HF_HUB_DISABLE_XET: '1', HF_HOME: process.env.HF_HOME || path.join(dataDir, 'cache/huggingface') } });
+  const duration = 'duration' in request && typeof request.duration === 'number' ? request.duration : 0;
+  const timeout = task === 'prepare' ? 1800000 : task === 'subtitles' ? Math.max(600000, Math.ceil(duration * 1200)) : 240000;
+  await runProcess(pythonPath, ['-X', 'utf8', path.join(rootDir, 'workers/media/worker.py'), task, '--request', input, '--response', output], { signal, timeout, env: { ...process.env, TEMP: path.join(path.dirname(dataDir), 'tmp'), TMP: path.join(path.dirname(dataDir), 'tmp'), PYTHONUTF8: '1', HF_HUB_DISABLE_XET: '1', HF_HOME: process.env.HF_HOME || path.join(dataDir, 'cache/huggingface') } });
   return JSON.parse(await readFile(output, 'utf8')) as T;
 }
 export async function probeFile(filename: string, signal?: AbortSignal) {
