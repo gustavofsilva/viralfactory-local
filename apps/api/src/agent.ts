@@ -121,7 +121,12 @@ export async function tickAgent(options: { now?: Date; forcePrepare?: boolean; c
           const host = new URL(source.url).hostname;
           return host.endsWith('tse.jus.br') || host === 'agenciabrasil.ebc.com.br';
         });
-        const generalTopic = (trend: typeof eligible[number]) => !sensitiveText(`${trend.title} ${trend.summary}`);
+        // RSS articles often append unrelated headlines after "Notícias relacionadas".
+        // Classify the lead; the finished script still passes the full risk check.
+        const generalTopic = (trend: typeof eligible[number]) => {
+          const lead = trend.summary.split(/Notícias relacionadas:/i, 1)[0].slice(0, 500);
+          return !sensitiveText(`${trend.title} ${lead}`);
+        };
         const candidate = settings.topicFocus === 'elections' ? eligible.find(electionTopic) || (isHourlyCampaignAt(settings, slot.scheduledFor) ? eligible.find(generalTopic) : undefined) : eligible.find(generalTopic);
         if (!candidate) { await client.agentSlot.update({ where: { id: slot.id }, data: { status: 'WAITING_SOURCE', lastError: 'Aguardando assunto recente com texto suficiente. Manchetes isoladas e temas sensíveis não entram automaticamente.' } }); continue; }
         video = await client.$transaction(async tx => {

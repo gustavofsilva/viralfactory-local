@@ -12,6 +12,18 @@ import { narrationScenes, chooseEvidence } from '../src/script-compose.js';
 import { Worker, PermanentError } from '../src/queue.js';
 import { sensitiveText, scriptRisk } from '../src/content-risk.js';
 
+test('pauta geral ignora manchetes relacionadas no filtro inicial', async () => fixture(async client => {
+  const now = new Date('2026-10-13T13:30:00.000Z');
+  const settings = agentSettingsSchema.parse({ enabled: true, topicFocus: 'elections', hourlyStartAt: '2026-10-13T04:00:00.000Z', hourlyEndAt: '2026-10-15T03:00:00.000Z' });
+  await client.setting.create({ data: { key: 'agent', value: JSON.stringify(settings) } });
+  const summary = `${'A equipe venceu a rodada em casa. '.repeat(15)} Notícias relacionadas: A Justiça Eleitoral anuncia calendário.`;
+  await client.trend.create({ data: { fingerprint: 'sports-related-headlines', title: 'Equipe vence rodada do campeonato', summary, category: 'Esportes', publishedAt: now, observations: { create: { sourceName: 'Agência de teste', sourceUrl: 'https://example.com/feed', articleUrl: 'https://example.com/sports', summary, publishedAt: now, bucket: 'test' } } } });
+  await tickAgent({ client, now });
+  const slot = await client.agentSlot.findUniqueOrThrow({ where: { slotKey: '2026-10-13:11:00' } });
+  assert.equal(slot.status, 'GENERATING');
+  assert.ok(slot.videoId);
+}));
+
 async function fixture(run: (client: Db, reopened: Db) => Promise<void>) {
   const directory = await mkdtemp(path.join(dataDir, 'agent-test-'));
   const filename = path.join(directory, 'test.db');
