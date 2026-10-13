@@ -147,14 +147,15 @@ export async function renderClip(id: string, signal: AbortSignal, log: (value: s
     await mkdir(directory, { recursive: true });
     const pieces: string[] = [];
     const intro = path.join(directory, 'intro.png');
-    await mediaTask('clip_intro', { output: intro, handle: clip.account.handle, label: clip.account.label }, directory, signal);
+    const overlay = path.join(directory, 'overlay.png');
+    await mediaTask('clip_intro', { output: intro, overlay, handle: clip.account.handle, label: clip.account.label }, directory, signal);
     const introVideo = path.join(directory, 'part-intro.mp4');
     await runProcess(ffmpegPath, ['-hide_banner', '-loglevel', 'error', '-y', '-loop', '1', '-t', '1', '-i', intro, '-f', 'lavfi', '-t', '1', '-i', 'anullsrc=r=44100:cl=stereo', '-vf', 'fps=30,format=yuv420p', '-c:v', 'libx264', '-preset', 'veryfast', '-b:v', '2600k', '-c:a', 'aac', '-b:a', '128k', '-shortest', introVideo], { signal, timeout: 60000 });
     pieces.push(introVideo);
     for (const [index, segment] of segments.entries()) {
       const filename = path.join(directory, `part-${index}.mp4`);
       await log(`Gerando trecho ${index + 1}/${segments.length}.`);
-      await runProcess(ffmpegPath, ['-hide_banner', '-loglevel', 'error', '-y', '-ss', String(segment.start), '-t', String(segment.end - segment.start), '-i', clip.sourcePath, '-vf', 'scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=30,format=yuv420p', '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11,aresample=44100,aformat=channel_layouts=stereo', '-c:v', 'libx264', '-preset', 'veryfast', '-b:v', '2600k', '-maxrate', '2800k', '-bufsize', '5600k', '-c:a', 'aac', '-b:a', '128k', filename], { signal, timeout: 300000 });
+      await runProcess(ffmpegPath, ['-hide_banner', '-loglevel', 'error', '-y', '-ss', String(segment.start), '-t', String(segment.end - segment.start), '-i', clip.sourcePath, '-loop', '1', '-i', overlay, '-filter_complex', '[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=30,format=rgba[base];[base][1:v]overlay=0:0:shortest=1,format=yuv420p[v]', '-map', '[v]', '-map', '0:a:0', '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11,aresample=44100,aformat=channel_layouts=stereo', '-c:v', 'libx264', '-preset', 'veryfast', '-b:v', '2600k', '-maxrate', '2800k', '-bufsize', '5600k', '-c:a', 'aac', '-b:a', '128k', filename], { signal, timeout: 300000 });
       pieces.push(filename);
     }
     const manifest = path.join(directory, 'parts.txt');

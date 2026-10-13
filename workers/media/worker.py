@@ -208,7 +208,18 @@ def clip_intro(request):
     output = Path(request['output'])
     output.parent.mkdir(parents=True, exist_ok=True)
     image.save(output, 'PNG')
-    return {'output': str(output)}
+    overlay_path = request.get('overlay')
+    if overlay_path:
+        overlay = Image.new('RGBA', (1080, 1920), (0, 0, 0, 0))
+        paint = ImageDraw.Draw(overlay)
+        paint.rounded_rectangle((38, 90, 510, 160), radius=20, fill=(10, 31, 45, 205))
+        paint.text((60, 107), handle, font=ImageFont.truetype(font_bold, 34), fill=(244, 249, 244, 255))
+        paint.rounded_rectangle((40, 1450, 680, 1520), radius=20, fill=(10, 31, 45, 205))
+        paint.text((60, 1467), 'CURTE E SIGA PARA MAIS', font=ImageFont.truetype(font_bold, 32), fill=(255, 219, 91, 255))
+        overlay_file = Path(overlay_path)
+        overlay_file.parent.mkdir(parents=True, exist_ok=True)
+        overlay.save(overlay_file, 'PNG')
+    return {'output': str(output), 'overlay': overlay_path}
 
 def main():
     parser = argparse.ArgumentParser()
