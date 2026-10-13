@@ -22,7 +22,7 @@ A extensão ganhará um seletor de conta no popup e uma conexão independente po
 - **Importação:** upload em fluxo para arquivo temporário no D, tamanho máximo explícito, extensão e codec inspecionados pelo `ffprobe`, hash SHA-256 para evitar cópias acidentais. O banco guarda caminho local, duração, resolução, áudio, origem e conta escolhida.
 - **Sugestão:** transcrição com timestamps, detecção de pausas/cortes e análise local com Ollama. A saída precisa ser JSON validado: segmentos dentro da duração real, sem sobreposição, com mínimo de contexto e total de 60–90 s. Se o modelo falhar, o arquivo permanece importado para seleção manual.
 - **Edição:** controles de início/fim por trecho, ordem, descarte, prévia e confirmação. A proposta automática nunca vai direto à postagem.
-- **Renderização:** FFmpeg com áudio original e loudness controlado; formato vertical com enquadramento seguro, legendas, marca e intro configuráveis por conta. `ffprobe` valida duração, codec H.264/AAC e tamanho antes do envio. Arquivos intermediários e final ficam no D.
+- **Renderização:** FFmpeg com áudio original e loudness controlado; formato vertical com enquadramento seguro, legendas, marca e intro configuráveis por conta. `ffprobe` valida duração, codec H.264/AAC e tamanho antes do envio. O encoder ajusta o bitrate para manter o arquivo final abaixo do limite atual de 40 MB da ponte de extensão. Arquivos intermediários e final ficam no D.
 - **Publicação:** estado `DRAFT → APPROVED → QUEUED → SENDING → PUBLISHED` ou `UNKNOWN/BLOCKED`. A intenção de envio é persistida antes do clique. A fila verifica conta, arquivo e revisão outra vez imediatamente antes de publicar.
 
 ## Ordem de implementação e validação
