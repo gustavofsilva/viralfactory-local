@@ -87,7 +87,10 @@ export async function tickEpisodeBatches() {
       const clip = await db.clip.findFirst({ where: { batchId: batch.id, status: { in: ['IMPORTED', 'SUGGESTED', 'READY'] } }, orderBy: { sourceName: 'asc' } });
       if (!clip) continue;
       if (clip.status === 'READY') {
-        if ((!batch.burstTarget && batch.nextPublishAt > new Date()) || bridgeForAccount(batch.account.handle, primary).status(batch.account.handle).state !== 'CONNECTED') continue;
+        // TikTok often redirects to its content page after a successful post,
+        // where the account link is hidden. The publisher navigates back and
+        // verifies the exact account before any upload or submission.
+        if ((!batch.burstTarget && batch.nextPublishAt > new Date()) || !bridgeForAccount(batch.account.handle, primary).snapshot()) continue;
         await db.$transaction(async tx => {
           const changed = await tx.clip.updateMany({ where: { id: clip.id, status: 'READY', submissionStartedAt: null }, data: { status: 'QUEUED' } });
           if (!changed.count) return;
