@@ -166,7 +166,7 @@ export async function renderClip(id: string, signal: AbortSignal, log: (value: s
     await writeFile(subtitles, clipSubtitles(JSON.parse(clip.transcriptJson), segments), 'utf8');
     const output = path.join(directory, 'final.mp4');
     await log('Aplicando legendas e conferindo o MP4 final.');
-    await runProcess(ffmpegPath, ['-hide_banner', '-loglevel', 'error', '-y', '-i', combined, '-vf', "subtitles=caption.srt:force_style='Fontname=Arial,Fontsize=18,Outline=2,Shadow=1,MarginV=270'", '-c:v', 'libx264', '-preset', 'veryfast', '-b:v', '2600k', '-maxrate', '2800k', '-bufsize', '5600k', '-c:a', 'copy', '-movflags', '+faststart', output], { signal, timeout: 600000, cwd: directory });
+    await runProcess(ffmpegPath, ['-hide_banner', '-loglevel', 'error', '-y', '-i', combined, '-vf', "subtitles=caption.srt:force_style='Fontname=Arial,Fontsize=18,Outline=2,Shadow=1,MarginV=270',scale=720:1280:flags=lanczos,fps=24,format=yuv420p", '-c:v', 'libx264', '-preset', 'veryfast', '-profile:v', 'main', '-level', '3.1', '-b:v', '1100k', '-maxrate', '1400k', '-bufsize', '2800k', '-g', '48', '-keyint_min', '48', '-sc_threshold', '0', '-c:a', 'aac', '-b:a', '96k', '-movflags', '+faststart', output], { signal, timeout: 600000, cwd: directory });
     const info = await probeFile(output, signal);
     const bytes = (await stat(output)).size;
     if (bytes > 40 * 1024 * 1024 || Number(info.format.duration) < 60 || Number(info.format.duration) > 92) throw new Error(`MP4 fora do limite da extensão: ${bytes} bytes, ${info.format.duration} s.`);

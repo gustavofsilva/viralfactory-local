@@ -133,7 +133,8 @@
       const binary = atob(message.fileBase64);
       if (!binary.length || binary.length > 40*1024*1024) throw new Error('Vídeo inválido ou maior que 40 MB.');
       const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
-      const filename = typeof message.filename === 'string' && /^brasil-gerais-[a-z0-9-]{1,70}\.mp4$/.test(message.filename) ? message.filename : 'brasil-gerais-video.mp4';
+      const prefix = account.toLowerCase().replace(/[^a-z0-9-]/g, '-') + '-';
+      const filename = typeof message.filename === 'string' && message.filename.startsWith(prefix) && /^[a-z0-9-]{1,110}\.mp4$/.test(message.filename) ? message.filename : `${prefix}video.mp4`;
       const transfer = new DataTransfer(); transfer.items.add(new File([bytes], filename, { type: 'video/mp4' }));
       candidates[0].files = transfer.files;
       candidates[0].dispatchEvent(new Event('input', { bubbles: true })); candidates[0].dispatchEvent(new Event('change', { bubbles: true }));

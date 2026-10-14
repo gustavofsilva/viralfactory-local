@@ -27,9 +27,24 @@ export async function registerEpisodeBatchRoutes(app: FastifyInstance) {
     await db.$transaction(async tx => {
       await tx.clip.update({ where: { id: clip.id }, data: { status: render ? 'APPROVED' : 'IMPORTED', lastError: null } });
       if (job) await tx.job.update({ where: { id: job.id }, data: { status: 'RETRY_PENDING', attempts: 0, availableAt: new Date(), leaseOwner: null, leaseExpiresAt: null, lastError: null } });
-      await tx.episodeBatch.update({ where: { id }, data: { lastError: null } });
+      await tx.episodeBatch.update({ where: { id }, data: { enabled: true, lastError: null } });
     });
     if (!job) void tickEpisodeBatches().catch(error => app.log.error(error));
+    return { clipId: clip.id, resumed: true };
+  });
+  app.post('/api/episode-batches/:id/retry-blocked', async request => {
+    const { id } = idSchema.parse(request.params);
+    await db.episodeBatch.findUniqueOrThrow({ where: { id } });
+    const clip = await db.clip.findFirst({ where: { batchId: id, status: 'BLOCKED', submissionStartedAt: null, postUrl: null }, orderBy: { sourceName: 'asc' } });
+    if (!clip?.outputPath) throw Object.assign(new Error('Nenhum envio bloqueado antes da publicação pode ser retomado.'), { statusCode: 409 });
+    const job = await db.job.findUnique({ where: { dedupeKey: `clip-publish:${clip.id}` } });
+    if (job?.status !== 'FAILED') throw Object.assign(new Error('A tarefa de envio não terminou com falha.'), { statusCode: 409 });
+    await db.$transaction(async tx => {
+      const changed = await tx.clip.updateMany({ where: { id: clip.id, status: 'BLOCKED', submissionStartedAt: null, postUrl: null }, data: { status: 'QUEUED', lastError: null } });
+      if (!changed.count) throw new Error('O estado do envio mudou. Atualize o painel.');
+      await tx.job.update({ where: { id: job.id }, data: { status: 'RETRY_PENDING', attempts: 0, availableAt: new Date(), leaseOwner: null, leaseExpiresAt: null, lastError: null } });
+      await tx.episodeBatch.update({ where: { id }, data: { enabled: true, lastError: null } });
+    });
     return { clipId: clip.id, resumed: true };
   });
 }

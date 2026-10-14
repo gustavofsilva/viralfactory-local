@@ -19,7 +19,11 @@ export async function publishByExtension(options: {
       const result = await bridge.request(action, { account: options.account, ...args }, options.signal,
         { authorize: options.authorize, ...extra });
       return extensionSnapshotSchema.parse(result);
-    } catch (error) { throw new ExtensionNeedsAttention(error instanceof Error ? error.message : String(error)); }
+    } catch (error) {
+      await mkdir(options.evidenceDirectory, { recursive: true });
+      await writeFile(path.join(options.evidenceDirectory, `extension-error-${action.toLowerCase()}.json`), JSON.stringify({ action, message: error instanceof Error ? error.message : String(error), snapshot: bridge.snapshot(), at: new Date().toISOString() }, null, 2));
+      throw new ExtensionNeedsAttention(`${action}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   };
   const current = await command('INSPECT');
   if (new URL(current.url).pathname !== '/tiktokstudio/upload') await command('NAVIGATE', { url: 'https://www.tiktok.com/tiktokstudio/upload' });

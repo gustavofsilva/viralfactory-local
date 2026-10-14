@@ -70,7 +70,7 @@ export async function tickEpisodeBatches() {
         return;
       }
       const problem = await db.clip.findFirst({ where: { batchId: batch.id, status: { in: ['UNKNOWN', 'BLOCKED', 'FAILED', 'QUEUED', 'SENDING'] } }, orderBy: { sourceName: 'asc' } });
-      if (problem) { await db.episodeBatch.update({ where: { id: batch.id }, data: { lastError: `${problem.sourceName}: ${problem.status}. Confira antes de continuar.` } }); continue; }
+      if (problem) { await db.episodeBatch.update({ where: { id: batch.id }, data: { enabled: false, lastError: `${problem.sourceName}: ${problem.status}. Confira antes de continuar.` } }); continue; }
       const clip = await db.clip.findFirst({ where: { batchId: batch.id, status: { in: ['IMPORTED', 'SUGGESTED', 'READY'] } }, orderBy: { sourceName: 'asc' } });
       if (!clip) continue;
       if (clip.status === 'READY') {
