@@ -24,7 +24,7 @@ const worker = new Worker(async (job, signal, log) => {
   if (job.kind === 'CLIP_RENDER') return renderClip(JSON.parse(job.payload).clipId, signal, log);
   if (job.kind === 'CLIP_PUBLISH' && job.leaseOwner) {
     const payload = JSON.parse(job.payload);
-    return publishClip(payload.clipId, job.id, job.leaseOwner, payload.allowUnverifiedCaption === true, signal, log);
+    return publishClip(payload.clipId, job.id, job.leaseOwner, payload.allowUnverifiedCaption === true, payload.skipCaption === true, signal, log);
   }
   throw new PermanentError(`Etapa ${job.kind} ainda não implementada.`);
 });

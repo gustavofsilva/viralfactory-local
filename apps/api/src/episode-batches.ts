@@ -42,7 +42,7 @@ export async function createEpisodeBatch(input: z.infer<typeof episodeBatchInput
     const created = await tx.episodeBatch.create({ data: { accountId: account.id, sourceRoot: root, intervalMinutes: input.intervalMinutes, rightsConfirmedAt: new Date(), enabled: false } });
     await tx.clip.createMany({ data: found.map(item => {
       const title = episodeTitle(item.filename);
-      return { batchId: created.id, accountId: account.id, title, caption: `${title} | Melhores momentos.\n#Naruto #Anime #Cortes`, sourceName: path.basename(item.filename), sourcePath: item.filename, sourceBytes: item.size, sourceModifiedAt: item.modifiedAt, status: 'IMPORTED' };
+      return { batchId: created.id, accountId: account.id, title, caption: '', sourceName: path.basename(item.filename), sourcePath: item.filename, sourceBytes: item.size, sourceModifiedAt: item.modifiedAt, status: 'IMPORTED' };
     }) });
     return created;
   });
@@ -91,7 +91,7 @@ export async function tickEpisodeBatches() {
         await db.$transaction(async tx => {
           const changed = await tx.clip.updateMany({ where: { id: clip.id, status: 'READY', submissionStartedAt: null }, data: { status: 'QUEUED' } });
           if (!changed.count) return;
-          await tx.job.create({ data: { kind: 'CLIP_PUBLISH', dedupeKey: `clip-publish:${clip.id}`, payload: JSON.stringify({ clipId: clip.id, allowUnverifiedCaption: true }), maxAttempts: 3 } });
+          await tx.job.create({ data: { kind: 'CLIP_PUBLISH', dedupeKey: `clip-publish:${clip.id}`, payload: JSON.stringify({ clipId: clip.id, allowUnverifiedCaption: true, skipCaption: true }), maxAttempts: 3 } });
           await tx.episodeBatch.update({ where: { id: batch.id }, data: { nextPublishAt: new Date(Date.now() + batch.intervalMinutes * 60000), lastError: null } });
         });
         return;

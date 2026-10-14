@@ -9,11 +9,12 @@ export async function publishByExtension(options: {
   beforeSubmit: () => Promise<void>; authorize: () => Promise<void>;
   confirmCaptionPersistence?: () => Promise<boolean>;
   allowUnverifiedCaption?: boolean;
+  skipCaption?: boolean;
   knownPostLinks?: string[];
 }, bridge: ExtensionBridge = extensionBridge) {
   // The account owner may explicitly accept a source-only caption whose
   // persistence cannot be checked before clicking Publish.
-  if (!options.confirmCaptionPersistence && !options.allowUnverifiedCaption) throw new ExtensionNeedsAttention('Envio automático pausado: o TikTok ignorou a legenda no teste real. A extensão ainda não consegue confirmar que a legenda foi salva pelo site antes de publicar.');
+  if (!options.skipCaption && !options.confirmCaptionPersistence && !options.allowUnverifiedCaption) throw new ExtensionNeedsAttention('Envio automático pausado: o TikTok ignorou a legenda no teste real. A extensão ainda não consegue confirmar que a legenda foi salva pelo site antes de publicar.');
   const command = async (action: Parameters<typeof extensionBridge.request>[0], args: Record<string, unknown> = {}, extra: { file?: string; beforeDelivery?: () => Promise<void> } = {}) => {
     try {
       const result = await bridge.request(action, { account: options.account, ...args }, options.signal,
@@ -32,17 +33,17 @@ export async function publishByExtension(options: {
   const oldLinks = new Set(observedPostLinks([...initial.postLinks, ...(options.knownPostLinks || [])], options.account));
   const filename = `${options.account}-${options.caption.split(/\r?\n/, 1)[0].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60)}.mp4`;
   await command('UPLOAD', { filename }, { file: options.file });
-  await command('CAPTION', { caption: options.caption });
-  const ready = await command('READY', { caption: options.caption });
-  if (!extensionIdentity(ready, options.account, false) || !ready.captionMatches || !ready.postEnabled) throw new ExtensionNeedsAttention('A aba não confirmou conta, legenda e botão de publicação. Confira o TikTok.');
-  if (options.confirmCaptionPersistence && !await options.confirmCaptionPersistence()) throw new ExtensionNeedsAttention('O TikTok não confirmou que salvou a legenda. O vídeo não foi publicado.');
+  if (!options.skipCaption) await command('CAPTION', { caption: options.caption });
+  const ready = await command('READY', { caption: options.caption, skipCaption: options.skipCaption === true });
+  if (!extensionIdentity(ready, options.account, false) || !ready.hasVideo || (!options.skipCaption && !ready.captionMatches) || !ready.postEnabled) throw new ExtensionNeedsAttention('A aba não confirmou conta, vídeo e botão de publicação. Confira o TikTok.');
+  if (!options.skipCaption && options.confirmCaptionPersistence && !await options.confirmCaptionPersistence()) throw new ExtensionNeedsAttention('O TikTok não confirmou que salvou a legenda. O vídeo não foi publicado.');
   await mkdir(options.evidenceDirectory, { recursive: true });
   await writeFile(path.join(options.evidenceDirectory, 'extension-before-submit.json'), JSON.stringify(ready, null, 2));
   let started = false;
   let submittedAt = 0;
   let submitted;
   try {
-    submitted = await command('SUBMIT', { caption: options.caption }, { beforeDelivery: async () => { await options.beforeSubmit(); submittedAt = Date.now(); started = true; } });
+    submitted = await command('SUBMIT', { caption: options.caption, skipCaption: options.skipCaption === true }, { beforeDelivery: async () => { await options.beforeSubmit(); submittedAt = Date.now(); started = true; } });
   } catch (error) {
     if (!started) throw error;
     submitted = bridge.snapshot();

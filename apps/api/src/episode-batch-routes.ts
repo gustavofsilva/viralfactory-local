@@ -40,9 +40,9 @@ export async function registerEpisodeBatchRoutes(app: FastifyInstance) {
     const job = await db.job.findUnique({ where: { dedupeKey: `clip-publish:${clip.id}` } });
     if (job?.status !== 'FAILED') throw Object.assign(new Error('A tarefa de envio não terminou com falha.'), { statusCode: 409 });
     await db.$transaction(async tx => {
-      const changed = await tx.clip.updateMany({ where: { id: clip.id, status: 'BLOCKED', submissionStartedAt: null, postUrl: null }, data: { status: 'QUEUED', lastError: null } });
+      const changed = await tx.clip.updateMany({ where: { id: clip.id, status: 'BLOCKED', submissionStartedAt: null, postUrl: null }, data: { status: 'QUEUED', caption: '', lastError: null } });
       if (!changed.count) throw new Error('O estado do envio mudou. Atualize o painel.');
-      await tx.job.update({ where: { id: job.id }, data: { status: 'RETRY_PENDING', attempts: 0, availableAt: new Date(), leaseOwner: null, leaseExpiresAt: null, lastError: null } });
+      await tx.job.update({ where: { id: job.id }, data: { status: 'RETRY_PENDING', payload: JSON.stringify({ clipId: clip.id, allowUnverifiedCaption: true, skipCaption: true }), attempts: 0, availableAt: new Date(), leaseOwner: null, leaseExpiresAt: null, lastError: null } });
       await tx.episodeBatch.update({ where: { id }, data: { enabled: true, lastError: null } });
     });
     return { clipId: clip.id, resumed: true };

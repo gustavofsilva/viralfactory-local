@@ -178,7 +178,7 @@ export async function renderClip(id: string, signal: AbortSignal, log: (value: s
   }
 }
 
-export async function publishClip(id: string, jobId: string, owner: string, allowUnverifiedCaption: boolean, signal: AbortSignal, log: (value: string) => Promise<void>) {
+export async function publishClip(id: string, jobId: string, owner: string, allowUnverifiedCaption: boolean, skipCaption: boolean, signal: AbortSignal, log: (value: string) => Promise<void>) {
   const clip = await db.clip.findUniqueOrThrow({ where: { id }, include: { account: true } });
   if (clip.status !== 'QUEUED' || !clip.outputPath || clip.submissionStartedAt || clip.postUrl || !clip.account.enabled) throw new PermanentError('Clipe indisponível ou envio anterior existente.');
   const primary = (await getAgentSettings()).accountHandle;
@@ -200,7 +200,7 @@ export async function publishClip(id: string, jobId: string, owner: string, allo
     if (!changed.count) throw new PermanentError('Envio já iniciado.');
   };
   try {
-    const result = await publishByExtension({ file: clip.outputPath, caption: clip.caption, account: clip.account.handle, evidenceDirectory: directory, signal, beforeSubmit, authorize, allowUnverifiedCaption }, bridge);
+    const result = await publishByExtension({ file: clip.outputPath, caption: clip.caption, account: clip.account.handle, evidenceDirectory: directory, signal, beforeSubmit, authorize, allowUnverifiedCaption, skipCaption }, bridge);
     await db.clip.update({ where: { id }, data: { status: 'PUBLISHED', postUrl: result.postUrl, lastError: result.captionVerified ? null : 'Legenda pública não verificada pelo TikTok.' } });
     await log(`Publicado em ${result.postUrl}`);
   } catch (error) {

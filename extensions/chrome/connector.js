@@ -25,7 +25,7 @@
     if (named.length === 1) return named;
     return editable.filter(element => element.isContentEditable);
   }
-  function snapshot(account, caption, verifyPost = false) {
+  function snapshot(account, caption, verifyPost = false, skipCaption = false) {
     const handles = new Set();
     const profileLinks = new Set(), visibleHandles = new Set();
     const avatarImages = [];
@@ -74,7 +74,7 @@
     if (/^\/@[^/]+\/video\/\d+$/.test(location.pathname)) links.push(location.href);
     const captionFields = fields();
     const expected = normalized(caption);
-    const captionMatches = !!expected && (verifyPost ? normalized(document.body.innerText).includes(normalized(caption).slice(0, 70)) : captionFields.length === 1 && normalized(captionFields[0].isContentEditable ? captionFields[0].innerText : captionFields[0].value) === expected);
+    const captionMatches = skipCaption || (!!expected && (verifyPost ? normalized(document.body.innerText).includes(normalized(caption).slice(0, 70)) : captionFields.length === 1 && normalized(captionFields[0].isContentEditable ? captionFields[0].innerText : captionFields[0].value) === expected));
     const buttons = postButtons();
     return { connectorVersion: 5, url: location.href, title: document.title.slice(0, 200), accountHandles: [...handles].slice(0, 12), profileLinks: [...profileLinks].slice(0, 12), visibleHandles: [...visibleHandles], avatarImages, fileInputs: document.querySelectorAll('input[type=file]').length,
       postLinks: links, hasVideo: !!document.querySelector('video'), captionMatches, postEnabled: buttons.length === 1 && enabled(buttons[0]),
@@ -159,15 +159,15 @@
       return snapshot(account, message.caption);
     }
     if (message.action === 'READY') {
-      await waitFor(() => snapshot(account, message.caption).postEnabled && snapshot(account, message.caption).captionMatches, deadline);
+      await waitFor(() => snapshot(account, message.caption, false, message.skipCaption).hasVideo && snapshot(account, message.caption, false, message.skipCaption).postEnabled && snapshot(account, message.caption, false, message.skipCaption).captionMatches, deadline);
       await new Promise(resolve => setTimeout(resolve, 2000));
-      if (!snapshot(account, message.caption).postEnabled || !snapshot(account, message.caption).captionMatches) throw new Error('A legenda mudou antes de publicar.');
-      await requireAccount(account, deadline); return snapshot(account, message.caption);
+      if (!snapshot(account, message.caption, false, message.skipCaption).hasVideo || !snapshot(account, message.caption, false, message.skipCaption).postEnabled || !snapshot(account, message.caption, false, message.skipCaption).captionMatches) throw new Error('O vídeo ou o botão mudou antes de publicar.');
+      await requireAccount(account, deadline); return snapshot(account, message.caption, false, message.skipCaption);
     }
     if (message.action === 'SUBMIT') {
       if (!message.commandId || clicked.has(message.commandId)) throw new Error('Este envio já foi executado.');
-      const current = snapshot(account, message.caption), buttons = postButtons();
-      if (!current.captionMatches || !current.postEnabled || Date.now() >= deadline) throw new Error('Legenda ou botão mudou antes de publicar.');
+      const current = snapshot(account, message.caption, false, message.skipCaption), buttons = postButtons();
+      if (!current.captionMatches || !current.hasVideo || !current.postEnabled || Date.now() >= deadline) throw new Error('Vídeo ou botão mudou antes de publicar.');
       await requireAccount(account, deadline);
       clicked.add(message.commandId); // Mark before click; never retry a failed or uncertain click.
       buttons[0].click();
