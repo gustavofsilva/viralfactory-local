@@ -37,7 +37,7 @@ test('publicador por extensão preserva a tela aberta e registra intenção ante
       if (!command) { await new Promise(resolve => setTimeout(resolve, 1)); continue; }
       actions.push(command.action);
       if (command.action === 'CAPTION') current = { ...current, captionMatches: true };
-      if (command.action === 'READY') current = { ...current, postEnabled: true };
+      if (command.action === 'READY') current = { ...current, hasVideo: true, postEnabled: true };
       if (command.action === 'SUBMIT') { assert.equal(intents, 1); current = { ...current, postLinks: [postUrl] }; }
       if (command.action === 'VERIFY_POST') current = { ...current, url: postUrl, hasVideo: true };
       bridge.result(connection, command.id, current);
@@ -64,7 +64,7 @@ test('legenda não verificada aceita somente post observado após um único envi
       if (!command) { await new Promise(resolve => setTimeout(resolve, 1)); continue; }
       actions.push(command.action);
       if (command.action === 'CAPTION') current = { ...current, captionMatches: true };
-      if (command.action === 'READY') current = { ...current, postEnabled: true };
+      if (command.action === 'READY') current = { ...current, hasVideo: true, postEnabled: true };
       if (command.action === 'SUBMIT') current = { ...current, url: postUrl, postLinks: [postUrl], hasVideo: true };
       bridge.result(connection, command.id, current);
     }
@@ -90,7 +90,7 @@ test('lista de conteúdo confirma post novo sem exigir legenda persistida', asyn
       const command = await bridge.poll(connection, current);
       if (!command) { await new Promise(resolve => setTimeout(resolve, 1)); continue; }
       if (command.action === 'CAPTION') current = { ...current, captionMatches: true };
-      if (command.action === 'READY') current = { ...current, postEnabled: true };
+      if (command.action === 'READY') current = { ...current, hasVideo: true, postEnabled: true };
       if (command.action === 'SUBMIT') current = { ...current, url: 'https://www.tiktok.com/tiktokstudio/content', postLinks: [postUrl, oldUrl], hasVideo: false };
       bridge.result(connection, command.id, current);
     }

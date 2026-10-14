@@ -27,6 +27,15 @@ export async function registerAccountRoutes(app: FastifyInstance) {
     const primary = (await getAgentSettings()).accountHandle;
     return prepareExtension(account.handle.toLowerCase() === primary.toLowerCase() ? undefined : account.handle);
   });
+  app.post('/api/accounts/:id/extension/disconnect', async request => {
+    const { id } = idSchema.parse(request.params);
+    const account = await db.tikTokAccount.findUniqueOrThrow({ where: { id } });
+    const primary = (await getAgentSettings()).accountHandle;
+    if (account.handle.toLowerCase() === primary.toLowerCase()) throw Object.assign(new Error('Use o painel do agente para desconectar a conta principal.'), { statusCode: 409 });
+    const bridge = bridgeForAccount(account.handle, primary);
+    bridge.disconnect();
+    return { ok: true, connection: bridge.status(account.handle) };
+  });
   app.post('/api/accounts/:id/browser/check', async request => {
     const { id } = idSchema.parse(request.params);
     const account = await db.tikTokAccount.findUniqueOrThrow({ where: { id } });

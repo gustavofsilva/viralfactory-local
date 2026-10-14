@@ -52,6 +52,13 @@ export async function prepareExtension(account?: string) {
   const directory = extensionDirectory(account);
   await mkdir(directory, { recursive: true });
   for (const filename of ['manifest.json', 'background.js', 'connector.js', 'popup.html', 'popup.js', 'popup.css']) await copyFile(path.join(rootDir, 'extensions/chrome', filename), path.join(directory, filename));
+  if (account) {
+    const manifestPath = path.join(directory, 'manifest.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as { name: string; action: { default_title: string } };
+    manifest.name = `ViralFactory — @${account}`;
+    manifest.action.default_title = `ViralFactory — @${account}`;
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
+  }
   await writeFile(path.join(directory, 'config.js'), `export const API_BASE = ${JSON.stringify(`http://127.0.0.1:${apiPort}`)};\nexport const BRIDGE_TOKEN = ${JSON.stringify(await extensionKey())};\nexport const ACCOUNT_HANDLE = ${JSON.stringify(account || '')};\n`, { mode: 0o600 });
   return { directory, instructions: 'No Chrome habitual, abra chrome://extensions, ative Modo do desenvolvedor, clique em Carregar sem compactação e selecione esta pasta. Na aba de envio do TikTok, abra ViralFactory e clique em Conectar esta aba.' };
 }

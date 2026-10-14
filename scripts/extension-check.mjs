@@ -22,7 +22,7 @@ try {
   assert.match((await send({ action: 'SUBMIT', account: 'outra_conta', commandId: 'wrong', caption: 'Fixture' })).error, /Perfil diferente ou ambíguo/);
   const bytes = Buffer.from('MP4 fictício para testar transferência local de arquivo');
   assert.equal((await send({ action: 'UPLOAD', fileBase64: bytes.toString('base64') })).error, undefined);
-  assert.equal(await page.locator('input[type=file]').evaluate(input => input.files[0].name), 'brasil-gerais-video.mp4');
+  assert.equal(await page.locator('input[type=file]').evaluate(input => input.files[0].name), 'conta-teste-video.mp4');
   await page.evaluate(() => { const avatar = document.createElement('input'); avatar.type = 'file'; avatar.accept = 'image/*'; avatar.id = 'avatar'; document.body.append(avatar); });
   assert.equal((await send({ action: 'UPLOAD', fileBase64: bytes.toString('base64') })).error, undefined);
   assert.equal(await page.locator('#avatar').evaluate(input => input.files.length), 0);
@@ -32,6 +32,7 @@ try {
   await page.evaluate(() => { window.editorEvents = []; document.querySelector('[contenteditable]').addEventListener('input', event => window.editorEvents.push({ trusted: event.isTrusted, data: event.data })); });
   assert.equal((await send({ action: 'CAPTION', caption })).snapshot.captionMatches, true);
   assert.equal((await page.evaluate(() => window.editorEvents.some(event => event.trusted))), true);
+  await page.evaluate(() => document.body.append(document.createElement('video')));
   assert.equal((await send({ action: 'READY', caption })).snapshot.postEnabled, true);
   assert.equal((await send({ action: 'SUBMIT', caption, commandId: 'submit-once' })).error, undefined);
   assert.match((await send({ action: 'SUBMIT', caption, commandId: 'submit-once' })).error, /já foi executado/);
@@ -60,7 +61,7 @@ try {
   assert.equal((await avatarSend({ action: 'REVEAL_ACCOUNT' })).snapshot.accountHandles[0], 'conta_teste');
   assert.equal(await avatarPage.evaluate(() => window.avatarClicks), 1);
   const reviewPage = await browser.newPage();
-  await reviewPage.route('https://www.tiktok.com/**', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: '<!doctype html><html><body><header><a href="/@conta_teste">@conta_teste</a></header><div contenteditable="true" role="textbox" aria-label="Legenda"></div><button id="post">Publicar</button><script>window.confirmations=0;document.querySelector("#post").onclick=()=>{const dialog=document.createElement("div");dialog.setAttribute("role","dialog");dialog.innerHTML="<p>Continuar publicando?</p><p>Ainda estamos verificando se há possíveis problemas com seu vídeo.</p><button>Cancelar</button><button id=confirmar>Publicar agora</button>";document.body.append(dialog);document.querySelector("#confirmar").onclick=()=>window.confirmations++};</script></body></html>' }));
+  await reviewPage.route('https://www.tiktok.com/**', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: '<!doctype html><html><body><header><a href="/@conta_teste">@conta_teste</a></header><div contenteditable="true" role="textbox" aria-label="Legenda"></div><video></video><button id="post">Publicar</button><script>window.confirmations=0;document.querySelector("#post").onclick=()=>{const dialog=document.createElement("div");dialog.setAttribute("role","dialog");dialog.innerHTML="<p>Continuar publicando?</p><p>Ainda estamos verificando se há possíveis problemas com seu vídeo.</p><button>Cancelar</button><button id=confirmar>Publicar agora</button>";document.body.append(dialog);document.querySelector("#confirmar").onclick=()=>window.confirmations++};</script></body></html>' }));
   await reviewPage.goto('https://www.tiktok.com/tiktokstudio/upload');
   await reviewPage.evaluate(() => { window.chrome = { runtime: { id: 'fixture', onMessage: { addListener(listener) { window.connectorListener = listener; } } } }; });
   await reviewPage.evaluate(connector);

@@ -115,11 +115,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       await connect(tab.id, previous.tabId === tab.id ? previous.clientId : undefined); void tick(); return { ok: true };
     }
     if (message.action === 'DISCONNECT') {
-      try { await api('disconnect', { connectionId: (await chrome.storage.session.get('connectionId')).connectionId }); }
+      const { connectionId } = await chrome.storage.session.get('connectionId');
+      try { if (connectionId) await api('disconnect', { connectionId }); }
       finally { await chrome.storage.session.remove(['connectionId', 'tabId', 'receipts']); await chrome.alarms.clear('viralfactory-heartbeat'); }
       return { ok: true };
     }
-    if (message.action === 'STATUS') return chrome.storage.session.get(['tabId', 'detail', 'connectionId', 'account']);
+    if (message.action === 'STATUS') return { ...await chrome.storage.session.get(['tabId', 'detail', 'connectionId', 'account']), configuredAccount: ACCOUNT_HANDLE };
     throw new Error('Ação não reconhecida.');
   };
   run().then(sendResponse).catch(error => sendResponse({ error: String(error.message || error) }));

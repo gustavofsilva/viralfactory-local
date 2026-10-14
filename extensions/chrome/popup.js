@@ -5,8 +5,12 @@ async function action(action) {
     const result = await chrome.runtime.sendMessage({ action });
     if (result?.error) throw new Error(result.error);
     const state = await chrome.runtime.sendMessage({ action: 'STATUS' });
-    status.textContent = state.connectionId ? state.detail || 'Aba conectada. Verifique a conta no painel local.' : 'Sem aba conectada.';
-  } catch (error) { status.textContent = error.message; }
+    const account = state.configuredAccount ? `@${state.configuredAccount}: ` : '';
+    status.textContent = account + (state.connectionId ? state.detail || 'Aba conectada. Verifique a conta no painel local.' : 'Sem aba conectada.');
+  } catch (error) {
+    const state = await chrome.runtime.sendMessage({ action: 'STATUS' }).catch(() => null);
+    status.textContent = `${state?.configuredAccount ? `@${state.configuredAccount}: ` : ''}${error.message}`;
+  }
   finally { connect.disabled = disconnect.disabled = false; }
 }
 connect.addEventListener('click', () => void action('CONNECT'));
