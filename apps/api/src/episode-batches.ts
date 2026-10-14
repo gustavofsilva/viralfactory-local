@@ -69,6 +69,19 @@ export async function tickEpisodeBatches() {
         else if (!job || job.status === 'COMPLETED') await db.clip.update({ where: { id: interrupted.id }, data: { status: 'FAILED', lastError: 'Etapa interrompida sem tarefa ativa. Confira este episódio.' } });
         return;
       }
+      const blocked = await db.clip.findFirst({ where: { batchId: batch.id, status: 'BLOCKED' }, orderBy: { sourceName: 'asc' } });
+      if (blocked && !blocked.submissionStartedAt && !blocked.postUrl) {
+        const job = await db.job.findUnique({ where: { dedupeKey: `clip-publish:${blocked.id}` } });
+        if (job?.status === 'FAILED' && job.attempts < job.maxAttempts) {
+          await db.$transaction(async tx => {
+            const changed = await tx.clip.updateMany({ where: { id: blocked.id, status: 'BLOCKED', submissionStartedAt: null, postUrl: null }, data: { status: 'QUEUED', lastError: null } });
+            if (!changed.count) return;
+            await tx.job.update({ where: { id: job.id }, data: { status: 'RETRY_PENDING', availableAt: new Date(Date.now() + Math.min(60000, 5000 * 2 ** job.attempts)), leaseOwner: null, leaseExpiresAt: null, lastError: null } });
+            await tx.jobLog.create({ data: { jobId: job.id, level: 'warning', message: `Falha antes da publicação; nova tentativa automática ${job.attempts + 1}/${job.maxAttempts}.` } });
+          });
+          return;
+        }
+      }
       const problem = await db.clip.findFirst({ where: { batchId: batch.id, status: { in: ['UNKNOWN', 'BLOCKED', 'FAILED', 'QUEUED', 'SENDING'] } }, orderBy: { sourceName: 'asc' } });
       if (problem) { await db.episodeBatch.update({ where: { id: batch.id }, data: { enabled: false, lastError: `${problem.sourceName}: ${problem.status}. Confira antes de continuar.` } }); continue; }
       const clip = await db.clip.findFirst({ where: { batchId: batch.id, status: { in: ['IMPORTED', 'SUGGESTED', 'READY'] } }, orderBy: { sourceName: 'asc' } });
@@ -78,7 +91,7 @@ export async function tickEpisodeBatches() {
         await db.$transaction(async tx => {
           const changed = await tx.clip.updateMany({ where: { id: clip.id, status: 'READY', submissionStartedAt: null }, data: { status: 'QUEUED' } });
           if (!changed.count) return;
-          await tx.job.create({ data: { kind: 'CLIP_PUBLISH', dedupeKey: `clip-publish:${clip.id}`, payload: JSON.stringify({ clipId: clip.id, allowUnverifiedCaption: true }), maxAttempts: 1 } });
+          await tx.job.create({ data: { kind: 'CLIP_PUBLISH', dedupeKey: `clip-publish:${clip.id}`, payload: JSON.stringify({ clipId: clip.id, allowUnverifiedCaption: true }), maxAttempts: 3 } });
           await tx.episodeBatch.update({ where: { id: batch.id }, data: { nextPublishAt: new Date(Date.now() + batch.intervalMinutes * 60000), lastError: null } });
         });
         return;
