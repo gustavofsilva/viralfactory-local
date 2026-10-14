@@ -46,4 +46,10 @@ export async function registerAccountRoutes(app: FastifyInstance) {
     await bridge.request('REVEAL_ACCOUNT', { account: account.handle }, AbortSignal.timeout(85000));
     return bridge.status(account.handle);
   });
+  app.post('/api/accounts/:id/browser/diagnose', async request => {
+    const { id } = idSchema.parse(request.params);
+    const account = await db.tikTokAccount.findUniqueOrThrow({ where: { id } });
+    const bridge = bridgeForAccount(account.handle, (await getAgentSettings()).accountHandle);
+    return bridge.request('DIAGNOSE', { account: account.handle }, AbortSignal.timeout(25000), { timeout: 20000 });
+  });
 }

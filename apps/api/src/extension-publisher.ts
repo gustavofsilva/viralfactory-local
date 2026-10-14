@@ -26,8 +26,10 @@ export async function publishByExtension(options: {
       throw new ExtensionNeedsAttention(`${action}: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
-  const current = await command('INSPECT');
-  if (new URL(current.url).pathname !== '/tiktokstudio/upload') await command('NAVIGATE', { url: 'https://www.tiktok.com/tiktokstudio/upload' });
+  await command('INSPECT');
+  // A failed upload can leave TikTok on the same URL with stale controls.
+  // Reload the selected tab before every attempt, including safe retries.
+  await command('NAVIGATE', { url: 'https://www.tiktok.com/tiktokstudio/upload' });
   const initial = await command('REVEAL_ACCOUNT');
   if (!extensionIdentity(initial, options.account)) throw new ExtensionNeedsAttention('A extensão não confirmou a conta na tela de envio. Abra o menu de perfil para exibir seu @.');
   const oldLinks = new Set(observedPostLinks([...initial.postLinks, ...(options.knownPostLinks || [])], options.account));

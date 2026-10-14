@@ -134,6 +134,8 @@ model EpisodeBatch {
   sourceRoot        String
   intervalMinutes   Int
   nextPublishAt     DateTime @default(now())
+  burstTarget       Int @default(0)
+  burstSuccesses    Int @default(0)
   enabled           Boolean @default(false)
   rightsConfirmedAt DateTime
   lastError         String?

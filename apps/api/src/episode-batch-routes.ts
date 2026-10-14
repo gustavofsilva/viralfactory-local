@@ -7,6 +7,16 @@ const idSchema = z.object({ id: z.string().min(1).max(100) });
 export async function registerEpisodeBatchRoutes(app: FastifyInstance) {
   app.get('/api/episode-batches', episodeBatchOverview);
   app.post('/api/episode-batches', async request => createEpisodeBatch(episodeBatchInput.parse(request.body)));
+  app.post('/api/episode-batches/:id/burst', async request => {
+    const { id } = idSchema.parse(request.params);
+    const { target } = z.object({ target: z.number().int().min(1).max(10) }).parse(request.body);
+    const batch = await db.episodeBatch.findUniqueOrThrow({ where: { id }, include: { account: true } });
+    if (!batch.account.enabled) throw Object.assign(new Error('Conta de destino desativada.'), { statusCode: 409 });
+    if (await db.clip.count({ where: { batchId: id, status: { in: ['UNKNOWN', 'SENDING'] } } })) throw Object.assign(new Error('Confirme o envio pendente antes de iniciar o teste.'), { statusCode: 409 });
+    const updated = await db.episodeBatch.update({ where: { id }, data: { burstTarget: target, burstSuccesses: 0, enabled: true, nextPublishAt: new Date(), lastError: null } });
+    void tickEpisodeBatches().catch(error => app.log.error(error));
+    return updated;
+  });
   app.patch('/api/episode-batches/:id', async request => {
     const { id } = idSchema.parse(request.params);
     const { enabled } = z.object({ enabled: z.boolean() }).parse(request.body);

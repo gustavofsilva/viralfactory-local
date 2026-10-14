@@ -9,6 +9,7 @@ import { PermanentError } from './queue.js';
 import { bridgeForAccount } from './extension-bridge.js';
 import { getAgentSettings } from './agent.js';
 import { publishByExtension } from './extension-publisher.js';
+import { afterBurstPublication } from './episode-burst.js';
 
 export const clipSegmentSchema = z.object({ start: z.number().min(0), end: z.number().positive(), text: z.string().max(1200).default('') });
 export const clipSegmentsSchema = z.array(clipSegmentSchema).min(1).max(8);
@@ -201,11 +202,21 @@ export async function publishClip(id: string, jobId: string, owner: string, allo
   };
   try {
     const result = await publishByExtension({ file: clip.outputPath, caption: clip.caption, account: clip.account.handle, evidenceDirectory: directory, signal, beforeSubmit, authorize, allowUnverifiedCaption, skipCaption }, bridge);
-    await db.clip.update({ where: { id }, data: { status: 'PUBLISHED', postUrl: result.postUrl, lastError: result.captionVerified ? null : 'Legenda pública não verificada pelo TikTok.' } });
+    await db.$transaction(async tx => {
+      await tx.clip.update({ where: { id }, data: { status: 'PUBLISHED', postUrl: result.postUrl, lastError: skipCaption || result.captionVerified ? null : 'Legenda pública não verificada pelo TikTok.' } });
+      if (clip.batchId) {
+        const batch = await tx.episodeBatch.findUniqueOrThrow({ where: { id: clip.batchId } });
+        const next = afterBurstPublication(batch);
+        if (next) await tx.episodeBatch.update({ where: { id: batch.id }, data: next });
+      }
+    });
     await log(`Publicado em ${result.postUrl}`);
   } catch (error) {
     const current = await db.clip.findUniqueOrThrow({ where: { id } });
-    await db.clip.update({ where: { id }, data: { status: current.submissionStartedAt ? 'UNKNOWN' : 'BLOCKED', lastError: error instanceof Error ? error.message : String(error) } });
+    await db.$transaction(async tx => {
+      await tx.clip.update({ where: { id }, data: { status: current.submissionStartedAt ? 'UNKNOWN' : 'BLOCKED', lastError: error instanceof Error ? error.message : String(error) } });
+      if (clip.batchId) await tx.episodeBatch.updateMany({ where: { id: clip.batchId, burstTarget: { gt: 0 } }, data: { burstSuccesses: 0 } });
+    });
     throw new PermanentError(error instanceof Error ? error.message : String(error));
   }
 }

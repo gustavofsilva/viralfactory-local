@@ -18,10 +18,15 @@ export const extensionSnapshotSchema = z.object({
   fileInputs: z.number().int().min(0).max(20),
   postLinks: z.array(z.url().max(2000)).max(30),
   hasVideo: z.boolean(), captionMatches: z.boolean().default(false),
-  postEnabled: z.boolean().default(false), alerts: z.array(z.string().max(300)).max(5).default([])
+  postEnabled: z.boolean().default(false), alerts: z.array(z.string().max(300)).max(5).default([]),
+  diagnostics: z.object({
+    controls: z.array(z.object({ tag: z.string().max(20), text: z.string().max(100), aria: z.string().max(100), title: z.string().max(100), disabled: z.boolean() })).max(60),
+    media: z.array(z.object({ tag: z.string().max(20), className: z.string().max(120), testId: z.string().max(100), width: z.number().int(), height: z.number().int() })).max(40),
+    fileInputs: z.number().int().min(0).max(20)
+  }).optional()
 });
 export type ExtensionSnapshot = z.infer<typeof extensionSnapshotSchema>;
-export type ExtensionAction = 'INSPECT' | 'REVEAL_ACCOUNT' | 'NAVIGATE' | 'UPLOAD' | 'CAPTION' | 'READY' | 'SUBMIT' | 'VERIFY_POST';
+export type ExtensionAction = 'INSPECT' | 'REVEAL_ACCOUNT' | 'NAVIGATE' | 'UPLOAD' | 'CAPTION' | 'READY' | 'SUBMIT' | 'VERIFY_POST' | 'DIAGNOSE';
 export function validTikTokTab(value: string) {
   try { const url = new URL(value); return url.origin === 'https://www.tiktok.com'; } catch { return false; }
 }

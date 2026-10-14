@@ -25,6 +25,15 @@
     if (named.length === 1) return named;
     return editable.filter(element => element.isContentEditable);
   }
+  function uploadPreviewPresent() {
+    if (document.querySelector('video')) return true;
+    // TikTok Studio renders uploaded MP4s into a canvas, with a generated
+    // cover image beside it. Both must be visible before the publish control
+    // can be treated as belonging to an uploaded video.
+    const player = document.querySelector('[class*="mobile-preview-player"] canvas');
+    const cover = document.querySelector('img.cover-image');
+    return !!player && !!cover && visible(player) && visible(cover);
+  }
   function snapshot(account, caption, verifyPost = false, skipCaption = false) {
     const handles = new Set();
     const profileLinks = new Set(), visibleHandles = new Set();
@@ -77,7 +86,7 @@
     const captionMatches = skipCaption || (!!expected && (verifyPost ? normalized(document.body.innerText).includes(normalized(caption).slice(0, 70)) : captionFields.length === 1 && normalized(captionFields[0].isContentEditable ? captionFields[0].innerText : captionFields[0].value) === expected));
     const buttons = postButtons();
     return { connectorVersion: 5, url: location.href, title: document.title.slice(0, 200), accountHandles: [...handles].slice(0, 12), profileLinks: [...profileLinks].slice(0, 12), visibleHandles: [...visibleHandles], avatarImages, fileInputs: document.querySelectorAll('input[type=file]').length,
-      postLinks: links, hasVideo: !!document.querySelector('video'), captionMatches, postEnabled: buttons.length === 1 && enabled(buttons[0]),
+      postLinks: links, hasVideo: uploadPreviewPresent(), captionMatches, postEnabled: buttons.length === 1 && enabled(buttons[0]),
       alerts: [...document.querySelectorAll('[role=alert]')].filter(visible).map(element => normalized(element.innerText).slice(0, 300)).slice(0, 5) };
   }
   const identified = (account, current) => current.accountHandles.length === 1 && current.accountHandles[0].toLowerCase() === account.toLowerCase();

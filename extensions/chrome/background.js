@@ -24,6 +24,23 @@ async function tabMessage(tabId, message) {
   return result.snapshot;
 }
 async function inspect(tabId, account, caption) { return tabMessage(tabId, { action: 'INSPECT', account, caption }); }
+function inspectPageControls() {
+  const visible = element => { const box = element.getBoundingClientRect(); return box.width > 0 && box.height > 0 && getComputedStyle(element).visibility !== 'hidden'; };
+  const label = value => String(value || '').replace(/\s+/g, ' ').trim().slice(0, 100);
+  const controls = [...document.querySelectorAll('button,[role=button],input[type=submit]')].filter(visible).map(element => ({
+    tag: element.tagName.toLowerCase(), text: label(element.innerText || element.value), aria: label(element.getAttribute('aria-label')),
+    title: label(element.getAttribute('title')), disabled: !!element.disabled || element.getAttribute('aria-disabled') === 'true'
+  }));
+  controls.sort((a, b) => Number(/publicar|postar|publish|post/i.test(`${b.text} ${b.aria}`)) - Number(/publicar|postar|publish|post/i.test(`${a.text} ${a.aria}`)));
+  const media = [...document.querySelectorAll('video,canvas,img,[data-testid*="preview" i],[class*="preview" i]')].filter(element => {
+    const box = element.getBoundingClientRect(); return visible(element) && box.width >= 80 && box.height >= 50;
+  }).slice(0, 40).map(element => {
+    const box = element.getBoundingClientRect();
+    return { tag: element.tagName.toLowerCase(), className: String(element.className?.baseVal || element.className || '').slice(0, 120),
+      testId: String(element.getAttribute('data-testid') || '').slice(0, 100), width: Math.round(box.width), height: Math.round(box.height) };
+  });
+  return { controls: controls.slice(0, 60), media, fileInputs: document.querySelectorAll('input[type=file]').length };
+}
 async function connect(tabId, existingClientId) {
   const config = await api(`configuration${ACCOUNT_HANDLE ? `?account=${encodeURIComponent(ACCOUNT_HANDLE)}` : ''}`);
   const snapshot = await inspect(tabId, config.account);
@@ -35,12 +52,19 @@ async function connect(tabId, existingClientId) {
 }
 async function execute(tabId, connectionId, command) {
   if (!command || command.expiresAt <= Date.now()) throw new Error('Comando expirou antes de executar.');
-  const actions = ['INSPECT', 'REVEAL_ACCOUNT', 'NAVIGATE', 'UPLOAD', 'CAPTION', 'READY', 'SUBMIT', 'VERIFY_POST'];
+  const actions = ['INSPECT', 'REVEAL_ACCOUNT', 'NAVIGATE', 'UPLOAD', 'CAPTION', 'READY', 'SUBMIT', 'VERIFY_POST', 'DIAGNOSE'];
   if (!actions.includes(command.action)) throw new Error('Comando não reconhecido.');
   const state = await chrome.storage.session.get('connectionId');
   if (state.connectionId !== connectionId) throw new Error('A aba foi desconectada.');
   await api('permit', { connectionId, commandId: command.id });
   const args = command.args || {};
+  if (command.action === 'DIAGNOSE') {
+    const tab = await chrome.tabs.get(tabId);
+    if (!allowedTab(tab.url)) throw new Error('A aba selecionada saiu do TikTok.');
+    const [result] = await chrome.scripting.executeScript({ target: { tabId }, func: inspectPageControls });
+    if (!result?.result) throw new Error('A aba não devolveu os controles visíveis.');
+    return { ...await inspect(tabId, args.account), diagnostics: result.result };
+  }
   if (['NAVIGATE', 'VERIFY_POST'].includes(command.action)) {
     const url = new URL(args.url);
     const expected = command.action === 'NAVIGATE' ? url.href === 'https://www.tiktok.com/tiktokstudio/upload' :

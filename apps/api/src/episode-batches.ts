@@ -83,16 +83,16 @@ export async function tickEpisodeBatches() {
         }
       }
       const problem = await db.clip.findFirst({ where: { batchId: batch.id, status: { in: ['UNKNOWN', 'BLOCKED', 'FAILED', 'QUEUED', 'SENDING'] } }, orderBy: { sourceName: 'asc' } });
-      if (problem) { await db.episodeBatch.update({ where: { id: batch.id }, data: { enabled: false, lastError: `${problem.sourceName}: ${problem.status}. Confira antes de continuar.` } }); continue; }
+      if (problem) { await db.episodeBatch.update({ where: { id: batch.id }, data: { enabled: false, burstSuccesses: batch.burstTarget ? 0 : batch.burstSuccesses, lastError: `${problem.sourceName}: ${problem.status}. Confira antes de continuar.` } }); continue; }
       const clip = await db.clip.findFirst({ where: { batchId: batch.id, status: { in: ['IMPORTED', 'SUGGESTED', 'READY'] } }, orderBy: { sourceName: 'asc' } });
       if (!clip) continue;
       if (clip.status === 'READY') {
-        if (batch.nextPublishAt > new Date() || bridgeForAccount(batch.account.handle, primary).status(batch.account.handle).state !== 'CONNECTED') continue;
+        if ((!batch.burstTarget && batch.nextPublishAt > new Date()) || bridgeForAccount(batch.account.handle, primary).status(batch.account.handle).state !== 'CONNECTED') continue;
         await db.$transaction(async tx => {
           const changed = await tx.clip.updateMany({ where: { id: clip.id, status: 'READY', submissionStartedAt: null }, data: { status: 'QUEUED' } });
           if (!changed.count) return;
           await tx.job.create({ data: { kind: 'CLIP_PUBLISH', dedupeKey: `clip-publish:${clip.id}`, payload: JSON.stringify({ clipId: clip.id, allowUnverifiedCaption: true, skipCaption: true }), maxAttempts: 3 } });
-          await tx.episodeBatch.update({ where: { id: batch.id }, data: { nextPublishAt: new Date(Date.now() + batch.intervalMinutes * 60000), lastError: null } });
+          await tx.episodeBatch.update({ where: { id: batch.id }, data: { nextPublishAt: batch.burstTarget ? new Date() : new Date(Date.now() + batch.intervalMinutes * 60000), lastError: null } });
         });
         return;
       }

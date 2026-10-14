@@ -43,7 +43,7 @@ test('publicador por extensão preserva a tela aberta e registra intenção ante
       bridge.result(connection, command.id, current);
     }
     assert.equal((await promise).postUrl, postUrl);
-    assert.deepEqual(actions, ['INSPECT', 'REVEAL_ACCOUNT', 'UPLOAD', 'CAPTION', 'READY', 'SUBMIT', 'VERIFY_POST']);
+    assert.deepEqual(actions, ['INSPECT', 'NAVIGATE', 'REVEAL_ACCOUNT', 'UPLOAD', 'CAPTION', 'READY', 'SUBMIT', 'VERIFY_POST']);
     assert.equal(intents, 1);
   } finally {
     controller.abort(); bridge.disconnect(); await promise.catch(() => {});
@@ -70,7 +70,7 @@ test('legenda não verificada aceita somente post observado após um único envi
     }
     assert.deepEqual(await promise, { postUrl, captionVerified: false });
     assert.equal(intents, 1);
-    assert.deepEqual(actions, ['INSPECT', 'REVEAL_ACCOUNT', 'UPLOAD', 'CAPTION', 'READY', 'SUBMIT']);
+    assert.deepEqual(actions, ['INSPECT', 'NAVIGATE', 'REVEAL_ACCOUNT', 'UPLOAD', 'CAPTION', 'READY', 'SUBMIT']);
   } finally {
     controller.abort(); bridge.disconnect(); await promise.catch(() => {});
     for (const file of ['extension-before-submit.json', 'extension-post-unverified-caption.json']) await unlink(path.join(directory, file)).catch(() => {});
