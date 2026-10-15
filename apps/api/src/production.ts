@@ -189,5 +189,5 @@ export async function produceVideo(videoId: string, jobId: string, owner: string
   const metadata = { title: script.title, scriptOrigin: script.origin || 'unknown', description: script.description, hashtags: script.hashtags, sources: script.sourceUrls, media: media.assets, voice: { model: audio.voice, modelCard: 'https://huggingface.co/rhasspy/piper-voices/blob/main/pt/pt_BR/faber/medium/MODEL_CARD', datasetLicense: 'CC0' }, duration: artifacts.render.duration, reviewRequired: true };
   await writeFile(path.join(directory, 'metadata.json'), JSON.stringify(metadata, null, 2), 'utf8');
   await save('REVIEW_PENDING');
-  await log(`MP4 verificado e salvo (${artifacts.render.duration.toFixed(1)}s). Aguardando revisão humana.`);
+  await log(`MP4 verificado e salvo (${artifacts.render.duration.toFixed(1)}s). Pronto para revisão no Estúdio ou publicação automática autorizada.`);
 }

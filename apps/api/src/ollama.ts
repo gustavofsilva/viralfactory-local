@@ -99,7 +99,7 @@ export async function generateScript(videoId: string, owner: string, jobId: stri
   const selectedSources = [...new Map(observations.map(item => [item.articleUrl, { url: item.articleUrl, publisher: item.sourceName, publishedAt: item.publishedAt?.toISOString(), text: item.summary }])).values()].filter(item => item.text.length >= 350 && item.publishedAt).slice(0, 3);
   const sources = selectedSources.map(source => ({ ...source, text: source.text.slice(0, Math.floor(4500 / selectedSources.length)) }));
   if (!sources.length) throw new PermanentError('As fontes têm informações insuficientes para um roteiro. Importe um resumo verificável com data e link.');
-  const research = { title: video.trend.title, eventDate: video.trend.eventDate, collectedAt: new Date().toISOString(), limitation: 'Evidências são resumos RSS ou textos importados. A auditoria automática confere consistência com essas fontes, sem confirmação independente. Pautas sensíveis exigem revisão humana.', sources };
+  const research = { title: video.trend.title, eventDate: video.trend.eventDate, collectedAt: new Date().toISOString(), limitation: 'Evidências são resumos RSS ou textos importados. A auditoria automática confere consistência com essas fontes, sem confirmação independente.', sources };
   signal.throwIfAborted();
   await client.$transaction(async tx => {
     const active = await tx.job.findFirst({ where: { id: jobId, leaseOwner: owner, status: 'RUNNING' } });

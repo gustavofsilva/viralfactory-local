@@ -29,7 +29,7 @@ export async function registerAgentRoutes(app: FastifyInstance) {
     if (settings.publicationEnabled && (!settings.enabled || !settings.accountHandle)) throw Object.assign(new Error('Ative o agente e informe o @ antes de habilitar a publicação.'), { statusCode: 400 });
     await db.setting.upsert({ where: { key: 'agent' }, create: { key: 'agent', value: JSON.stringify(settings) }, update: { value: JSON.stringify(settings) } });
     const pending = await db.agentSlot.findMany({ where: { status: { notIn: ['PUBLISHED', 'SENDING', 'UNKNOWN', 'SKIPPED'] } } });
-    for (const slot of pending) if (!(settings.burstTarget > settings.burstSuccesses && slot.slotKey.startsWith(`burst:${settings.burstRunId}:`)) && !publicationTimesForDay(settings, slot.slotKey.slice(0, 10)).includes(slot.slotKey.slice(-5))) {
+    for (const slot of pending) if (!slot.slotKey.startsWith('burst:') && !publicationTimesForDay(settings, slot.slotKey.slice(0, 10)).includes(slot.slotKey.slice(-5))) {
       const job = await db.job.findUnique({ where: { dedupeKey: `tiktok:${slot.id}` } });
       if (job && activeStatuses.includes(job.status)) await cancelJob(job.id);
       await db.agentSlot.update({ where: { id: slot.id }, data: { status: 'SKIPPED', lastError: 'Horário alterado nas preferências.' } });
