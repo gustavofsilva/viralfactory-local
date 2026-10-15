@@ -2,7 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { settingsSchema, scriptSchema } from '@viralfactory/shared';
 import { allowedLicense, relevantImageTitle } from '../src/media-provider.js';
-import { productionRevision, sceneDurations } from '../src/production.js';
+import { narrationPadding, productionRevision, sceneDurations } from '../src/production.js';
+test('narração quase no mínimo ganha apenas uma pausa final curta', () => {
+  assert.equal(narrationPadding(14.4).toFixed(1), '0.8');
+  assert.equal(narrationPadding(12), 0);
+  assert.equal(narrationPadding(20), 0);
+});
 import { runProcess } from '../src/subprocess.js';
 import { aiScriptSchema, materializeScript, discardFalseUnsupported, longestCopiedPhrase, repairMetadata } from '../src/ollama.js';
 

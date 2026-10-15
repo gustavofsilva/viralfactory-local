@@ -78,7 +78,11 @@ export async function listTrends(client: Db = db): Promise<Trend[]> {
     rows.push(...batch);
     if (batch.length < 250) break;
   }
-  return rows.map(row => {
+  // Google News can add more than a thousand headline-only entries in a day.
+  // Keep recent full-text publisher articles in the candidate pool as well.
+  const direct = await client.trend.findMany({ where: { publishedAt: { gte: new Date(Date.now() - 72 * 3600000) }, observations: { some: { NOT: { articleUrl: { contains: 'news.google.com' } } } } }, take: 250, orderBy: { publishedAt: 'desc' }, include: { observations: { orderBy: { observedAt: 'desc' }, take: 200 }, videos: { select: { id: true } } } });
+  const candidates = [...new Map([...rows, ...direct].map(row => [row.id, row])).values()];
+  return candidates.map(row => {
     const unique = [...new Map(row.observations.map(item => [item.articleUrl, item])).values()];
     const count = new Set(unique.map(item => item.sourceName)).size;
     const age = row.publishedAt ? Math.max(0, (Date.now() - row.publishedAt.getTime()) / 3600000) : null;

@@ -8,9 +8,13 @@ import { PermanentError } from './queue.js';
 import { runProcess } from './subprocess.js';
 import { commonsAsset, sourceImageAsset } from './media-provider.js';
 import { scriptRisk } from './content-risk.js';
+import { getAgentSettings } from './agent.js';
 type State = typeof pipelineStates[number];
 export function productionRevision(script: Script, settings: Settings) {
   return createHash('sha256').update(JSON.stringify({ script, template: settings.template, duration: settings.durationSeconds, speed: settings.ttsSpeed, size: settings.subtitleSize, color: settings.subtitleColor, margin: settings.subtitleMargin, provider: settings.mediaProvider, voice: piperModel, branding: 'brasilgerais-intro-1s', version: 8 })).digest('hex').slice(0, 20);
+}
+export function narrationPadding(duration: number) {
+  return duration >= 13.5 && duration < 15 ? 15.2 - duration : 0;
 }
 const exists = async (filename: string | undefined) => { if (!filename) return false; try { await access(filename); return true; } catch { return false; } };
 export function sceneDurations(scenes: Script['scenes'], words: TimedWord[], duration: number) {
@@ -55,7 +59,7 @@ export async function produceVideo(videoId: string, jobId: string, owner: string
   const video = await client.video.findUniqueOrThrow({ where: { id: videoId } });
   if (!video.scriptJson) throw new PermanentError('Gere ou salve um roteiro antes de produzir o vídeo.');
   const script = JSON.parse(video.scriptJson) as Script;
-  if (scriptRisk(script) === 'sensitive' && !video.scriptReviewedAt) throw new PermanentError('Este assunto é sensível. A revisão humana do roteiro é necessária antes da produção.');
+  if (scriptRisk(script) === 'sensitive' && !video.scriptReviewedAt && !(await getAgentSettings(client)).autoPublishSensitive) throw new PermanentError('Este assunto é sensível. A revisão humana do roteiro é necessária antes da produção.');
   const settings = await getSettings(client);
   const revision = productionRevision(script, settings);
   const previous = video.artifactJson ? JSON.parse(video.artifactJson) as Artifacts : null;
@@ -88,6 +92,14 @@ export async function produceVideo(videoId: string, jobId: string, owner: string
       audio.output = fitted;
       audio.duration = Number((await probeFile(fitted, signal)).format.duration);
       await log(`Ritmo ajustado à duração desejada: ${audio.duration.toFixed(1)} segundos.`);
+    }
+    const padding = narrationPadding(audio.duration);
+    if (padding) {
+      const padded = path.join(directory, 'narration-padded.wav');
+      await runProcess(ffmpegPath, ['-hide_banner', '-loglevel', 'error', '-y', '-i', audio.output, '-af', `apad=pad_dur=${padding.toFixed(3)}`, '-t', '15.2', '-c:a', 'pcm_s16le', padded], { signal, timeout: 60000 });
+      audio.output = padded;
+      audio.duration = Number((await probeFile(padded, signal)).format.duration);
+      await log(`Final do clipe ajustado para ${audio.duration.toFixed(1)} segundos, mantendo a velocidade da fala.`);
     }
     artifacts.audio = { path: audio.output, duration: audio.duration, voice: audio.voice };
     if (audio.duration < 15 || audio.duration > 90) throw new PermanentError(`A narração tem ${audio.duration.toFixed(1)} segundos. Edite o roteiro ou a velocidade para ficar entre 15 e 90 segundos.`);

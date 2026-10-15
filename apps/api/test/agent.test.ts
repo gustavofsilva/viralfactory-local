@@ -4,10 +4,11 @@ import { mkdtemp, readdir, readFile, unlink, rmdir } from 'node:fs/promises';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { agentSettingsSchema, scriptSchema } from '@viralfactory/shared';
-import { createDb, type Db } from '../src/db.js';
+import { createDb, getSettings, type Db } from '../src/db.js';
 import { dataDir, rootDir } from '../src/config.js';
 import { tickAgent, localDay, scheduledInstant, isAutomaticallyPublishable, isHourlyCampaignAt, getAgentSettings, publicationTimesForDay, publicationLimitForDay } from '../src/agent.js';
 import { visibleAccountMatches, observedPostLinks, publicationCaption } from '../src/tiktok-browser.js';
+import { productionRevision } from '../src/production.js';
 import { narrationScenes, chooseEvidence } from '../src/script-compose.js';
 import { Worker, PermanentError } from '../src/queue.js';
 import { sensitiveText, scriptRisk } from '../src/content-risk.js';
@@ -76,6 +77,58 @@ test('agenda temporária grava os 47 horários sem criar posts duplicados', asyn
   assert.equal(await reopened.agentSlot.count(), 47);
   assert.equal(await reopened.agentSlot.count({ where: { slotKey: '2026-10-14:23:00' } }), 1);
 }));
+
+test('teste de três posts cria um envio por vez e depois agenda cada hora', async () => fixture(async (client, reopened) => {
+  const now = new Date('2026-10-15T03:30:00.000Z');
+  const settings = agentSettingsSchema.parse({ enabled: true, publicationEnabled: true, accountHandle: 'brasilgerais', continuousHourly: true, autoPublishNormal: true, autoPublishSensitive: true, burstRunId: 'fb3b6cf7-e482-4c5c-b9e1-a05f57f243a9', burstTarget: 3, burstSuccesses: 0 });
+  await client.setting.create({ data: { key: 'agent', value: JSON.stringify(settings) } });
+  assert.deepEqual(publicationTimesForDay(settings, '2026-10-15'), []);
+  await tickAgent({ client, now });
+  await tickAgent({ client: reopened, now });
+  assert.equal(await reopened.agentSlot.count({ where: { slotKey: { startsWith: `burst:${settings.burstRunId}:` } } }), 1);
+  const first = await reopened.agentSlot.findFirstOrThrow({ where: { slotKey: { startsWith: `burst:${settings.burstRunId}:` } } });
+  await reopened.agentSlot.update({ where: { id: first.id }, data: { status: 'BLOCKED' } });
+  await tickAgent({ client: reopened, now });
+  assert.equal(await reopened.agentSlot.count({ where: { slotKey: { startsWith: `burst:${settings.burstRunId}:` } } }), 2);
+  const finished = { ...settings, burstSuccesses: 3, hourlyResumeAt: '2026-10-15T04:30:00.000Z' };
+  assert.deepEqual(publicationTimesForDay(finished, '2026-10-15').slice(0, 2), ['01:30', '02:30']);
+  assert.equal(publicationTimesForDay(finished, '2026-10-14').length, 0);
+  assert.equal(publicationLimitForDay(finished, '2026-10-15'), 30);
+}));
+
+test('teste encontra matéria sobre urnas e 2º turno em fonte completa', async () => fixture(async client => {
+  const now = new Date();
+  const settings = agentSettingsSchema.parse({ enabled: true, publicationEnabled: true, accountHandle: 'brasilgerais', continuousHourly: true, autoPublishSensitive: true, topicFocus: 'elections', burstRunId: '6b8a8f88-dba7-4656-a53e-cbd38746442f', burstTarget: 3 });
+  await client.setting.create({ data: { key: 'agent', value: JSON.stringify(settings) } });
+  const summary = 'A Justiça Eleitoral prepara urnas para o segundo turno. '.repeat(15);
+  await client.trend.create({ data: { fingerprint: 'ballot-fixture', title: 'Estado prepara urnas para o 2º turno', summary, category: 'Política', publishedAt: now, observations: { create: { sourceName: 'Agência Brasil', sourceUrl: 'https://agenciabrasil.ebc.com.br/rss/politica', articleUrl: 'https://agenciabrasil.ebc.com.br/politica/noticia/2026-10/urnas', summary, publishedAt: now, bucket: 'test' } } } });
+  await tickAgent({ client, now });
+  const slot = await client.agentSlot.findFirstOrThrow({ where: { slotKey: { startsWith: `burst:${settings.burstRunId}:` } } });
+  assert.equal(slot.status, 'GENERATING');
+  assert.ok(slot.videoId);
+}));
+
+test('teste reaproveita roteiro auditado cuja narração ficou pouco abaixo de 15 segundos', async () => fixture(async client => {
+  const now = new Date();
+  const settings = agentSettingsSchema.parse({ enabled: true, publicationEnabled: true, accountHandle: 'brasilgerais', continuousHourly: true, burstRunId: '338e9867-041b-4f83-8a30-4f055280842c', burstTarget: 3 });
+  await client.setting.create({ data: { key: 'agent', value: JSON.stringify(settings) } });
+  const trend = await client.trend.create({ data: { fingerprint: 'short-audio', title: script.title, summary: '', category: 'Teste' } });
+  const video = await client.video.create({ data: { trendId: trend.id, title: script.title, scriptJson: JSON.stringify(script), state: 'FAILED', lastError: 'A narração tem 14.4 segundos. Edite o roteiro ou a velocidade para ficar entre 15 e 90 segundos.' } });
+  const dedupeKey = `produce:${video.id}:${productionRevision(script, await getSettings(client))}`;
+  await client.job.create({ data: { kind: 'PRODUCE', dedupeKey, payload: JSON.stringify({ videoId: video.id }), videoId: video.id, status: 'FAILED' } });
+  await tickAgent({ client, now });
+  const slot = await client.agentSlot.findFirstOrThrow({ where: { slotKey: { startsWith: `burst:${settings.burstRunId}:` } } });
+  assert.equal(slot.videoId, video.id);
+  assert.equal((await client.job.findUniqueOrThrow({ where: { dedupeKey } })).status, 'RETRY_PENDING');
+}));
+
+test('roteiro eleitoral auditado pode seguir sem revisão manual quando autorizado', () => {
+  const settings = agentSettingsSchema.parse({ autoPublishNormal: true, autoPublishSensitive: true });
+  const video = { state: 'REVIEW_PENDING', outputPath: 'test.mp4', scriptJson: JSON.stringify({ ...script, title: 'A Justiça Eleitoral publica o calendário', risk: 'sensitive' }), scriptReviewedAt: null };
+  assert.equal(isAutomaticallyPublishable(video, settings), true);
+  assert.equal(isAutomaticallyPublishable(video, { ...settings, autoPublishSensitive: false }), false);
+  assert.equal(isAutomaticallyPublishable({ ...video, scriptJson: JSON.stringify({ ...script, origin: 'edited' }) }, settings), false);
+});
 
 test('fim da agenda por hora remove a permissão temporária', async () => fixture(async client => {
   const settings = agentSettingsSchema.parse({ enabled: true, autoPublishNormal: false, hourlyAutoPublishNormal: true, hourlyStartAt: '2026-10-13T04:00:00.000Z', hourlyEndAt: '2026-10-15T03:00:00.000Z' });

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { dataDir } from './config.js';
 import { db } from './db.js';
 import { getAgentSettings, isAutomaticallyPublishable, localDay, scheduledInstant, pausePublicationAfterUncertain, publicationLimitForDay } from './agent.js';
-import type { Artifacts, Script } from '@viralfactory/shared';
+import { agentSettingsSchema, type Artifacts, type Script } from '@viralfactory/shared';
 import { PermanentError } from './queue.js';
 import { publishByExtension, ExtensionNeedsAttention } from './extension-publisher.js';
 
@@ -140,7 +140,7 @@ export async function publishSlot(slotId: string, jobId: string, owner: string, 
   const slot = await db.agentSlot.findUniqueOrThrow({ where: { id: slotId }, include: { video: true } });
   const settings = await getAgentSettings();
   if (!settings.enabled || !settings.publicationEnabled || settings.loginPaused) throw new PermanentError('Publicação ou conexão do agente está pausada.');
-  if (Date.now() > slot.scheduledFor.getTime()+2*3600000) {
+  if (!slot.slotKey.startsWith('burst:') && Date.now() > slot.scheduledFor.getTime()+2*3600000) {
     await db.agentSlot.update({ where: { id: slotId }, data: { status: 'SKIPPED', lastError: 'Horário de envio expirou.' } });
     throw new PermanentError('Horário de envio expirou; não acumular posts atrasados.');
   }
@@ -153,7 +153,7 @@ export async function publishSlot(slotId: string, jobId: string, owner: string, 
   const beforeSubmit = async () => {
     signal.throwIfAborted();
     const latest = await getAgentSettings();
-    if (Date.now() > slot.scheduledFor.getTime()+2*3600000) throw new PermanentError('Horário expirou durante o upload.');
+    if (!slot.slotKey.startsWith('burst:') && Date.now() > slot.scheduledFor.getTime()+2*3600000) throw new PermanentError('Horário expirou durante o upload.');
     if (!latest.enabled || !latest.publicationEnabled || latest.loginPaused || latest.browserMode !== settings.browserMode || latest.accountHandle !== settings.accountHandle) throw new PermanentError('Configuração de publicação alterada durante o preparo.');
     await db.$transaction(async tx => {
       const active = await tx.job.findFirst({ where: { id: jobId, status: 'RUNNING', leaseOwner: owner } });
@@ -173,7 +173,7 @@ export async function publishSlot(slotId: string, jobId: string, owner: string, 
     const latest = await getAgentSettings();
     const active = await db.job.findFirst({ where: { id: jobId, status: 'RUNNING', leaseOwner: owner, leaseExpiresAt: { gt: new Date() } } });
     const currentVideo = await db.video.findUniqueOrThrow({ where: { id: video.id } });
-    if (!active || !latest.enabled || !latest.publicationEnabled || latest.loginPaused || latest.browserMode !== 'extension' || latest.accountHandle !== settings.accountHandle || currentVideo.outputPath !== video.outputPath || currentVideo.scriptJson !== video.scriptJson || !isAutomaticallyPublishable(currentVideo, latest) || Date.now() > slot.scheduledFor.getTime()+2*3600000) throw new PermanentError('A publicação foi pausada, expirou ou a tarefa mudou.');
+    if (!active || !latest.enabled || !latest.publicationEnabled || latest.loginPaused || latest.browserMode !== 'extension' || latest.accountHandle !== settings.accountHandle || currentVideo.outputPath !== video.outputPath || currentVideo.scriptJson !== video.scriptJson || !isAutomaticallyPublishable(currentVideo, latest) || !slot.slotKey.startsWith('burst:') && Date.now() > slot.scheduledFor.getTime()+2*3600000) throw new PermanentError('A publicação foi pausada, expirou ou a tarefa mudou.');
   };
   try {
     const options = { file: video.outputPath!, caption, account: settings.accountHandle, signal, evidenceDirectory: directory, beforeSubmit };
@@ -182,6 +182,12 @@ export async function publishSlot(slotId: string, jobId: string, owner: string, 
     await db.$transaction(async tx => {
       await tx.agentSlot.update({ where: { id: slot.id }, data: { status: 'PUBLISHED', postUrl: result.postUrl, lastError: 'captionVerified' in result && !result.captionVerified ? 'Legenda não verificada no TikTok; modo de fonte autorizado pelo proprietário.' : null } });
       await tx.video.update({ where: { id: video.id }, data: { state: 'PUBLISHED' } });
+      const currentSettings = agentSettingsSchema.parse(JSON.parse((await tx.setting.findUniqueOrThrow({ where: { key: 'agent' } })).value));
+      if (currentSettings.burstRunId && slot.slotKey.startsWith(`burst:${currentSettings.burstRunId}:`) && currentSettings.burstSuccesses < currentSettings.burstTarget) {
+        const burstSuccesses = currentSettings.burstSuccesses + 1;
+        const updated = { ...currentSettings, burstSuccesses, ...(burstSuccesses === currentSettings.burstTarget ? { hourlyResumeAt: new Date(Math.ceil((Date.now() + 3600000) / 60000) * 60000).toISOString() } : {}) };
+        await tx.setting.update({ where: { key: 'agent' }, data: { value: JSON.stringify(updated) } });
+      }
     });
     await log(`Publicação confirmada pela página: ${result.postUrl}`);
   } catch (error) {
